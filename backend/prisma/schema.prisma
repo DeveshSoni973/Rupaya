@@ -50,6 +50,7 @@ model User {
   groupsUpdated        Group[]       @relation("GroupUpdater")
   groupsDeleted        Group[]       @relation("GroupDeleter")
 
+  billsPaid            Bill[]        @relation("BillPayer")
   billsCreated         Bill[]        @relation("BillCreator")
   billsUpdated         Bill[]        @relation("BillUpdater")
   billsDeleted         Bill[]        @relation("BillDeleter")
@@ -129,6 +130,7 @@ model GroupMember {
 model Bill {
   id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   group_id     String      @db.Uuid
+  paid_by      String      @db.Uuid  // Who actually paid the bill
   created_by   String      @db.Uuid
   updated_by   String?     @db.Uuid
   deleted_by   String?     @db.Uuid
@@ -140,6 +142,7 @@ model Bill {
 
   // Relations
   group       Group        @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  payer       User         @relation("BillPayer", fields: [paid_by], references: [id], onDelete: Restrict)
   creator     User         @relation("BillCreator", fields: [created_by], references: [id], onDelete: Restrict)
   updater     User?        @relation("BillUpdater", fields: [updated_by], references: [id], onDelete: SetNull)
   deleter     User?        @relation("BillDeleter", fields: [deleted_by], references: [id], onDelete: SetNull)
@@ -147,6 +150,7 @@ model Bill {
   shares      BillShare[]
 
   @@index([group_id])
+  @@index([paid_by])
   @@index([created_by])
   @@index([updated_by])
   @@index([deleted_by])

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.db import prisma
-from app.routers import auth, groups, users
+from app.routers import auth, groups, users, bills
 
 app = FastAPI()
 
@@ -15,6 +15,7 @@ async def shutdown():
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(groups.router)
+app.include_router(bills.router)
 
 @app.get("/")
 async def root():

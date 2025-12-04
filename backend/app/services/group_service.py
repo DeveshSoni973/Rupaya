@@ -3,6 +3,45 @@ from fastapi import HTTPException, status
 from app.db import prisma
 from app.models.groups import GroupCreate, GroupUpdate, AddMemberRequest
 from app.services.auth_service import get_current_user
+from datetime import datetime
+
+async def check_is_member(user_id: str, group_id: str):
+    """
+    Verify if a user is an active member of a group.
+    Raises 403 if not a member.
+    Returns the membership record if valid.
+    """
+    member = await prisma.groupmember.find_first(
+        where={
+            "user_id": user_id,
+            "group_id": group_id,
+            "deleted_at": None
+        }
+    )
+    
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not a member of this group"
+        )
+    return member
+
+async def check_is_admin(user_id: str, group_id: str):
+    """
+    Verify if a user is an admin of a group.
+    Raises 403 if not an admin.
+    Returns the membership record if valid.
+    """
+    # First check if user is a member at all
+    member = await check_is_member(user_id, group_id)
+    
+    # Then verify they have admin role
+    if member.role != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only group admins can perform this action"
+        )
+    return member
 
 async def create_group(group_data: GroupCreate, creator_id: str):
     # Create the group
@@ -53,19 +92,7 @@ async def get_user_groups(user_id: str):
 
 async def get_group_detail(group_id: str, user_id: str):
     # Verify user has access to this group
-    membership = await prisma.groupmember.find_first(
-        where={
-            "group_id": group_id,
-            "user_id": user_id,
-            "deleted_at": None
-        }
-    )
-    
-    if not membership:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this group"
-        )
+    await check_is_member(user_id, group_id)
     
     # Get group with members
     group = await prisma.group.find_unique(
@@ -86,20 +113,7 @@ async def get_group_detail(group_id: str, user_id: str):
 
 async def add_member_to_group(group_id: str, member_data: AddMemberRequest, added_by_id: str):
     # Verify the adder is an admin of the group
-    adder_membership = await prisma.groupmember.find_first(
-        where={
-            "group_id": group_id,
-            "user_id": added_by_id,
-            "role": "ADMIN",
-            "deleted_at": None
-        }
-    )
-    
-    if not adder_membership:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only group admins can add members"
-        )
+    await check_is_admin(added_by_id, group_id)
     
     # Find user by email
     user_to_add = await prisma.user.find_unique(
@@ -141,20 +155,7 @@ async def add_member_to_group(group_id: str, member_data: AddMemberRequest, adde
 
 async def remove_member_from_group(group_id: str, member_id: str, removed_by_id: str):
     # Verify the remover is an admin
-    remover_membership = await prisma.groupmember.find_first(
-        where={
-            "group_id": group_id,
-            "user_id": removed_by_id,
-            "role": "ADMIN",
-            "deleted_at": None
-        }
-    )
-    
-    if not remover_membership:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only group admins can remove members"
-        )
+    await check_is_admin(removed_by_id, group_id)
     
     # Soft delete the membership
     membership = await prisma.groupmember.update(
