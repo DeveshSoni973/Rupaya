@@ -46,8 +46,8 @@ async def logout_user(token: str):
         if ttl > 0:
             await redis_client.setex(f"blacklist:{token}", ttl, "1")
         return {"detail": "Logged out successfully"}
-    except JWTError:
-        raise HTTPException(status_code=400, detail="Invalid token")
+    except JWTError as err:
+        raise HTTPException(status_code=400, detail="Invalid token") from err
 
 
 async def logout_all_sessions(token: str):
@@ -96,8 +96,8 @@ async def refresh_access_token(refresh_token: str):
 
         new_access = create_token({"sub": user_id}, token_type="access")
         return {"access_token": new_access, "token_type": "bearer"}
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+    except JWTError as err:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token") from err
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
@@ -119,5 +119,5 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         return user
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError as err:
+        raise HTTPException(status_code=401, detail="Invalid token") from err
