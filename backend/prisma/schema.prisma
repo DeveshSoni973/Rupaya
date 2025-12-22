@@ -15,6 +15,12 @@ enum GroupRole {
   MEMBER
 }
 
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
 //
 // ─── USERS ─────────────────────────────────────────────
 //
@@ -23,6 +29,7 @@ model User {
   name        String
   email       String       @unique
   password    String
+  role        Role         @default(USER)
   created_by  String?      @db.Uuid
   updated_by  String?      @db.Uuid
   deleted_by  String?      @db.Uuid
