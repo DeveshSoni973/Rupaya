@@ -51,6 +51,27 @@ The `docker-compose-dev.yml` includes:
   - Persistence: Enabled (AOF)
   - Container: `rupaya-redis`
 
+- **pgAdmin 4** (Latest)
+  - Web UI: `http://localhost:5050`
+  - Email: Set via `PGADMIN_EMAIL` in `.env` (default: `admin@admin.com`)
+  - Password: Set via `PGADMIN_PASSWORD` in `.env` (default: `admin`)
+  - Container: `rupaya-pgadmin`
+
+### Accessing pgAdmin
+
+1. Open your browser and go to: `http://localhost:5050`
+2. Login with the credentials from your `.env` file (default: `admin@admin.com` / `admin`)
+3. Add a new server connection:
+   - **General Tab:**
+     - Name: `Rupaya Local`
+   - **Connection Tab:**
+     - Host: `rupaya-postgres` (or `postgres` - the container name)
+     - Port: `5432`
+     - Maintenance database: `rupaya` (or your `POSTGRES_DB` value)
+     - Username: `postgres` (or your `POSTGRES_USER` value)
+     - Password: Your `POSTGRES_PASSWORD` value
+     - Save password: ✅ (optional)
+
 ### Connection Strings for Docker
 
 When using Docker Compose, use these connection strings in your `.env`:
