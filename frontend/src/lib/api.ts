@@ -15,6 +15,13 @@ class ApiClient {
             headers,
         });
 
+        if (response.status === 401) {
+            if (typeof window !== "undefined") {
+                localStorage.removeItem("token");
+                window.location.href = "/login?expired=true";
+            }
+        }
+
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.detail || "Something went wrong");

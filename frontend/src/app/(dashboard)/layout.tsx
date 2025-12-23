@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { AddExpenseModal } from "@/components/expenses/AddExpenseModal";
 import { api } from "@/lib/api";
@@ -10,20 +11,39 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode;
 }) {
+    const router = useRouter();
     const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
     const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
+    const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
     React.useEffect(() => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+            router.push("/login");
+            return;
+        }
+
         const fetchUser = async () => {
             try {
                 const user = await api.get<{ id: string }>("/users/me");
                 setCurrentUser(user);
+                setIsCheckingAuth(false);
             } catch (error) {
-                console.error("Failed to fetch user:", error);
+                console.error("Auth check failed:", error);
+                localStorage.removeItem("token");
+                router.push("/login");
             }
         };
         fetchUser();
-    }, []);
+    }, [router]);
+
+    if (isCheckingAuth) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <div className="flex min-h-screen bg-background text-foreground">
