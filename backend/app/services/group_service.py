@@ -35,17 +35,20 @@ class GroupService:
             raise ForbiddenError("Only group admins can perform this action")
         return member
 
-    async def create_group(self, group_data: GroupCreate, creator_id: str):
+    async def create_group(self, data: GroupCreate, creator_id: str):
+        if not data.initial_members:
+            raise ValidationError("A group must have at least one other member.")
+
         # Create the group
         group = await prisma.group.create(
             data={
-                "name": group_data.name,
-                "description": group_data.description,
+                "name": data.name,
+                "description": data.description,
                 "created_by": creator_id,
             }
         )
 
-        # Add creator as admin member
+        # 1. Add creator as admin
         await prisma.groupmember.create(
             data={
                 "user_id": creator_id,
@@ -54,6 +57,25 @@ class GroupService:
                 "created_by": creator_id,
             }
         )
+
+        # 2. Add initial members
+        for email in data.initial_members:
+            user = await prisma.user.find_unique(where={"email": email})
+            if not user:
+                continue  # Or raise an error? For now, we skip non-existent users
+            
+            # Prevent double adding creator if they added themselves in the list
+            if user.id == creator_id:
+                continue
+
+            await prisma.groupmember.create(
+                data={
+                    "user_id": user.id,
+                    "group_id": group.id,
+                    "role": "MEMBER",
+                    "created_by": creator_id,
+                }
+            )
 
         return group
 

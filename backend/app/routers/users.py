@@ -39,5 +39,15 @@ async def change_password(
     )
 
 
+@router.get("/search", response_model=list[UserOut])
+async def search_users(
+    q: str,
+    current_user: UserOut = Depends(get_current_user),
+    service: UserService = Depends(get_user_service),
+):
+    return await service.search_users(q, str(current_user.id))
+
+
+
 
 

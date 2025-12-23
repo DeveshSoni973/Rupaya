@@ -1,14 +1,15 @@
-from datetime import datetime
-from uuid import UUID
+from enum import Enum
 
-from pydantic import BaseModel, Field
 
-# --- Bill Share Models ---
+class SplitType(str, Enum):
+    EQUAL = "EQUAL"
+    EXACT = "EXACT"
+    PERCENTAGE = "PERCENTAGE"
 
 
 class BillShareBase(BaseModel):
     user_id: UUID
-    amount: float = Field(..., gt=0, description="Amount owed by this user")
+    amount: float | None = Field(None, gt=0, description="Amount owed by this user. Required for EXACT split.")
 
 
 class BillShareCreate(BillShareBase):
@@ -18,6 +19,7 @@ class BillShareCreate(BillShareBase):
 class BillShareResponse(BillShareBase):
     id: UUID
     paid: bool
+    amount: float  # Ensure it's returned in the response
 
     class Config:
         from_attributes = True
@@ -34,7 +36,11 @@ class BillBase(BaseModel):
 class BillCreate(BillBase):
     group_id: UUID
     paid_by: UUID | None = None  # Who paid the bill (defaults to creator if not specified)
+    split_type: SplitType = SplitType.EQUAL
+    # If EQUAL, just provide user IDs in shares (amount ignored).
+    # If EXACT, provide user_id and amount.
     shares: list[BillShareCreate]
+
 
 
 class BillResponse(BillBase):

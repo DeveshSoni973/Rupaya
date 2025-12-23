@@ -9,6 +9,8 @@ from app.models.users import UserOut
 class GroupCreate(BaseModel):
     name: str
     description: str | None = None
+    initial_members: list[str] = []  # List of emails to invite immediately
+
 
 
 class GroupUpdate(BaseModel):

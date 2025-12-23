@@ -6,7 +6,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.db import prisma
-from app.models.bills import BillCreate
+from app.models.bills import BillCreate, SplitType
 from app.services.group_service import GroupService
 
 
@@ -14,45 +14,49 @@ class BillService:
     def __init__(self, group_service: GroupService):
         self.group_service = group_service
 
-    def _validate_shares_total(self, shares: list, total_amount: float) -> None:
+    def _calculate_shares(self, data: BillCreate) -> list[dict]:
         """
-        Validate that the sum of shares equals the total amount.
-        Raises ValidationError if validation fails.
+        Calculate individual share amounts based on split type.
+        Returns a list of dictionaries for Prisma create.
         """
-        total_shares = sum(share.amount for share in shares)
-        # Allow a small floating point error margin
-        if abs(total_shares - total_amount) > 0.01:
-            raise ValidationError(
-                f"Sum of shares ({total_shares}) must equal total amount ({total_amount})"
-            )
-
-    def _prepare_shares_data(self, shares: list) -> list[dict]:
-        """
-        Transform share objects into Prisma-compatible data format.
-        """
-        return [
-            {"user_id": str(share.user_id), "amount": share.amount, "paid": False}
-            for share in shares
-        ]
+        if data.split_type == SplitType.EQUAL:
+            # For EQUAL split, 'shares' contains the users involved (including payer if they owe a part)
+            count = len(data.shares)
+            if count == 0:
+                raise ValidationError("At least one person must be involved in the split")
+            
+            individual_amount = data.total_amount / count
+            return [
+                {"user_id": str(share.user_id), "amount": individual_amount, "paid": False}
+                for share in data.shares
+            ]
+            
+        elif data.split_type == SplitType.EXACT:
+            total_shares = sum(share.amount or 0 for share in data.shares)
+            if abs(total_shares - data.total_amount) > 0.01:
+                raise ValidationError(f"Sum of shares ({total_shares}) must equal total amount ({data.total_amount})")
+            
+            return [
+                {"user_id": str(share.user_id), "amount": share.amount, "paid": False}
+                for share in data.shares
+            ]
+        
+        raise ValidationError(f"Split type {data.split_type} is not yet implemented")
 
     async def create_bill(self, user_id: str, data: BillCreate):
         """
         Create a new bill and its associated shares.
-        Validates that the user is a member of the group and that shares sum up to the total.
         """
         # 1. Check if group exists and user is a member
         await self.group_service.check_is_member(user_id, str(data.group_id))
 
-        # 2. Validate total amount matches shares
-        self._validate_shares_total(data.shares, data.total_amount)
+        # 2. Calculate and validate shares
+        shares_create = self._calculate_shares(data)
 
-        # 3. Prepare share data
-        shares_create = self._prepare_shares_data(data.shares)
-
-        # 4. Determine who paid (defaults to creator if not specified)
+        # 3. Determine who paid (defaults to creator if not specified)
         paid_by = str(data.paid_by) if data.paid_by else user_id
 
-        # 5. Create Bill with nested Shares using Prisma's nested write
+        # 4. Create Bill with nested Shares
         bill = await prisma.bill.create(
             data={
                 "description": data.description,

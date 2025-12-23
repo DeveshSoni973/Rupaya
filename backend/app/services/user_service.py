@@ -41,3 +41,17 @@ class UserService:
             raise NotFoundError("User not found")
         return user
 
+    async def search_users(self, query: str, current_user_id: str):
+        """Search users by name or email, excluding the current user."""
+        users = await prisma.user.find_many(
+            where={
+                "id": {"not": current_user_id},
+                "OR": [
+                    {"name": {"contains": query, "mode": "insensitive"}},
+                    {"email": {"contains": query, "mode": "insensitive"}},
+                ],
+            },
+            take=10,
+        )
+        return users
+
