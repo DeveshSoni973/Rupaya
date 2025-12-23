@@ -1,9 +1,10 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from jose import JWTError, jwt
 
 from app.core.config import settings
+from app.core.exceptions import NotFoundError, UnauthorizedError, ValidationError
 from app.core.redis import redis_client
 from app.core.security import encode_token, oauth2_scheme, verify_password
 from app.db import prisma
@@ -32,10 +33,7 @@ class AuthService:
     async def login_user(self, email: str, password: str):
         user = await prisma.user.find_unique(where={"email": email})
         if not user or not verify_password(password, user.password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
-            )
+            raise UnauthorizedError("Invalid email or password")
 
         access_token = self._create_token({"sub": user.id}, token_type="access")
         refresh_token = self._create_token({"sub": user.id}, token_type="refresh")
@@ -57,7 +55,7 @@ class AuthService:
                 await redis_client.setex(f"blacklist:{token}", ttl, "1")
             return {"detail": "Logged out successfully"}
         except JWTError as err:
-            raise HTTPException(status_code=400, detail="Invalid token") from err
+            raise ValidationError("Invalid token") from err
 
     async def logout_all_sessions(self, token: str):
         user = await get_current_user(token)
@@ -81,42 +79,36 @@ class AuthService:
     async def refresh_access_token(self, refresh_token: str):
         # Check if refresh token is blacklisted
         if await redis_client.exists(f"blacklist:{refresh_token}"):
-            raise HTTPException(status_code=401, detail="Refresh token invalidated")
+            raise UnauthorizedError("Refresh token invalidated")
 
         try:
             payload = jwt.decode(
                 refresh_token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
             )
             if payload.get("type") != "refresh":
-                raise HTTPException(status_code=401, detail="Invalid token type")
+                raise UnauthorizedError("Invalid token type")
 
             user_id = payload.get("sub")
             if not user_id:
-                raise HTTPException(status_code=401, detail="Invalid refresh token")
+                raise UnauthorizedError("Invalid refresh token")
 
             # Check if all sessions revoked
             if await redis_client.exists(f"revoke_all:{user_id}"):
-                raise HTTPException(
-                    status_code=401, detail="All sessions revoked. Please log in again."
-                )
+                raise UnauthorizedError("All sessions revoked. Please log in again.")
 
             user = await prisma.user.find_unique(where={"id": user_id})
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                raise NotFoundError("User not found")
 
             new_access = self._create_token({"sub": user_id}, token_type="access")
             return {"access_token": new_access, "token_type": "bearer"}
         except JWTError as err:
-            raise HTTPException(
-                status_code=401, detail="Invalid or expired refresh token"
-            ) from err
+            raise UnauthorizedError("Invalid or expired refresh token") from err
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     if await redis_client.exists(f"blacklist:{token}"):
-        raise HTTPException(
-            status_code=401, detail="Token invalidated. Please log in again."
-        )
+        raise UnauthorizedError("Token invalidated. Please log in again.")
 
     try:
         payload = jwt.decode(
@@ -125,18 +117,17 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         user_id = payload.get("sub")
 
         if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
+            raise UnauthorizedError("Invalid token payload")
 
         # Check global user revocation
         if await redis_client.exists(f"revoke_all:{user_id}"):
-            raise HTTPException(
-                status_code=401, detail="Session revoked. Please log in again."
-            )
+            raise UnauthorizedError("Session revoked. Please log in again.")
 
         user = await prisma.user.find_unique(where={"id": user_id})
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise NotFoundError("User not found")
         return user
     except JWTError as err:
-        raise HTTPException(status_code=401, detail="Invalid token") from err
+        raise UnauthorizedError("Invalid token") from err
+
 

@@ -1,8 +1,7 @@
 # app/services/group_service.py
 from datetime import datetime
 
-from fastapi import HTTPException, status
-
+from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
 from app.db import prisma
 from app.models.groups import AddMemberRequest, GroupCreate
 
@@ -19,10 +18,7 @@ class GroupService:
         )
 
         if not member:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User is not a member of this group",
-            )
+            raise ForbiddenError("User is not a member of this group")
         return member
 
     async def check_is_admin(self, user_id: str, group_id: str):
@@ -36,10 +32,7 @@ class GroupService:
 
         # Then verify they have admin role
         if member.role != "ADMIN":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only group admins can perform this action",
-            )
+            raise ForbiddenError("Only group admins can perform this action")
         return member
 
     async def create_group(self, group_data: GroupCreate, creator_id: str):
@@ -92,16 +85,16 @@ class GroupService:
         return group
 
     async def add_member_to_group(
-        self, group_id: str, member_data: AddMemberRequest, added_by_id: str
+        self, group_id: str, data: AddMemberRequest, added_by_id: str
     ):
         # Verify the adder is an admin of the group
         await self.check_is_admin(added_by_id, group_id)
 
         # Find user by email
-        user_to_add = await prisma.user.find_unique(where={"email": member_data.email})
+        user_to_add = await prisma.user.find_unique(where={"email": data.email})
 
         if not user_to_add:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            raise NotFoundError("User not found")
 
         # Check if already a member
         existing_member = await prisma.groupmember.find_first(
@@ -109,17 +102,14 @@ class GroupService:
         )
 
         if existing_member:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User is already a member of this group",
-            )
+            raise ValidationError("User is already a member of this group")
 
         # Add member
         member = await prisma.groupmember.create(
             data={
                 "user_id": user_to_add.id,
                 "group_id": group_id,
-                "role": member_data.role,
+                "role": data.role,
                 "created_by": added_by_id,
             }
         )
