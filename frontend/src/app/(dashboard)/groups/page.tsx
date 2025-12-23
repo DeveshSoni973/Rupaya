@@ -2,7 +2,14 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { Users, Plus, ChevronRight, UserPlus, MoreVertical } from "lucide-react";
+import {
+    Plus,
+    MoreVertical,
+    Users,
+    ChevronRight,
+    UserPlus,
+    X
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { cn } from "@/lib/utils"; // Assuming cn utility is available here
@@ -15,23 +22,58 @@ import { api } from "@/lib/api";
 interface Group {
     id: string;
     name: string;
-    type: string;
     owner_id: string;
+    members?: any[];
+    user_balance?: number;
 }
 
-const groupTypes = ["Home", "Trip", "Social", "Sports", "Other"];
-
 export default function GroupsPage() {
+    const [groupStep, setGroupStep] = React.useState<"info" | "members">("info");
     const [groups, setGroups] = React.useState<Group[]>([]);
     const [isModalOpen, setIsModalOpen] = React.useState(false);
     const [newGroupName, setNewGroupName] = React.useState("");
-    const [selectedType, setSelectedType] = React.useState("Home");
+    const [memberEmail, setMemberEmail] = React.useState("");
+
+    interface SearchUser {
+        id: string;
+        name: string;
+        email: string;
+    }
+    const [searchResults, setSearchResults] = React.useState<SearchUser[]>([]);
+    const [isSearching, setIsSearching] = React.useState(false);
+
+    const [addedMembers, setAddedMembers] = React.useState<SearchUser[]>([]);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(true);
 
     React.useEffect(() => {
         fetchGroups();
     }, []);
+
+    // Search logic
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            if (memberEmail.length > 1) {
+                handleSearch(memberEmail);
+            } else {
+                setSearchResults([]);
+            }
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [memberEmail]);
+
+    const handleSearch = async (query: string) => {
+        setIsSearching(true);
+        try {
+            const results = await api.get<SearchUser[]>(`/users/search?q=${query}`);
+            setSearchResults(results);
+        } catch (error) {
+            console.error("Search failed:", error);
+        } finally {
+            setIsSearching(false);
+        }
+    };
 
     const fetchGroups = async () => {
         try {
@@ -44,21 +86,37 @@ export default function GroupsPage() {
         }
     };
 
+    const resetModal = () => {
+        setIsModalOpen(false);
+        setGroupStep("info");
+        setNewGroupName("");
+        setMemberEmail("");
+        setAddedMembers([]);
+        setSearchResults([]);
+    };
+
     const handleCreateGroup = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
             await api.post("/groups/", {
                 name: newGroupName,
-                type: selectedType
+                initial_members: addedMembers.map(m => m.email)
             });
-            setIsModalOpen(false);
-            setNewGroupName("");
+            resetModal();
             fetchGroups();
         } catch (error) {
             alert(error instanceof Error ? error.message : "Failed to create group");
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const addMemberAction = (user: SearchUser) => {
+        if (!addedMembers.find(m => m.id === user.id)) {
+            setAddedMembers([...addedMembers, user]);
+            setMemberEmail("");
+            setSearchResults([]);
         }
     };
 
@@ -109,18 +167,19 @@ export default function GroupsPage() {
                             <div className="space-y-1">
                                 <h3 className="text-xl font-bold tracking-tight">{group.name}</h3>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <span className="px-2 py-0.5 bg-secondary rounded-md text-[10px] uppercase font-bold tracking-wider">
-                                        {group.type}
-                                    </span>
-                                    <span>•</span>
-                                    <span>New Group</span>
+                                    <span>{group.members?.length || 0} members</span>
                                 </div>
                             </div>
 
                             <div className="mt-6 pt-6 border-t border-border flex items-center justify-between">
                                 <div>
                                     <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Balance</p>
-                                    <p className="text-lg font-bold text-muted-foreground italic text-sm">₹0.00</p>
+                                    <p className={cn(
+                                        "text-lg font-bold",
+                                        (group as any).user_balance > 0 ? "text-emerald-500" : (group as any).user_balance < 0 ? "text-rose-500" : "text-muted-foreground"
+                                    )}>
+                                        {(group as any).user_balance > 0 ? '+' : ''}₹{((group as any).user_balance || 0).toLocaleString()}
+                                    </p>
                                 </div>
                                 <Link href={`/groups/${group.id}`}>
                                     <Button size="sm" variant="secondary" className="rounded-lg group-hover:bg-primary group-hover:text-white transition-colors">
@@ -171,60 +230,117 @@ export default function GroupsPage() {
             {/* Create Group Modal */}
             <Modal
                 isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                title="Create New Group"
-                description="Start a new group to manage shared expenses with specific friends."
+                onClose={resetModal}
+                title={groupStep === "info" ? "Create New Group" : "Add Members"}
+                description={groupStep === "info" ? "Give your group a name to get started." : `Adding members to "${newGroupName}"`}
             >
-                <form onSubmit={handleCreateGroup} className="space-y-6">
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">Group Name</label>
-                        <Input
-                            placeholder="e.g. Goa Trip, Flatmates"
-                            value={newGroupName}
-                            onChange={(e) => setNewGroupName(e.target.value)}
-                            required
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">Category</label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {groupTypes.map((type) => (
-                                <button
-                                    key={type}
-                                    type="button"
-                                    onClick={() => setSelectedType(type)}
-                                    className={cn(
-                                        "px-3 py-2 rounded-xl text-xs font-semibold transition-all border",
-                                        selectedType === type
-                                            ? "bg-primary border-primary text-white"
-                                            : "bg-secondary/50 border-border text-muted-foreground hover:border-primary/40"
-                                    )}
-                                >
-                                    {type}
-                                </button>
-                            ))}
+                <div className="space-y-6 pt-4">
+                    {groupStep === "info" ? (
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Group Name</label>
+                                <Input
+                                    placeholder="e.g. Flatmates, Goa Trip"
+                                    value={newGroupName}
+                                    onChange={(e) => setNewGroupName(e.target.value)}
+                                    className="h-12 text-lg font-medium rounded-xl"
+                                    autoFocus
+                                />
+                            </div>
+                            <Button
+                                className="w-full h-12 rounded-xl text-md font-bold shadow-lg shadow-primary/20"
+                                disabled={!newGroupName.trim()}
+                                onClick={() => setGroupStep("members")}
+                            >
+                                Next: Add Members
+                            </Button>
                         </div>
-                    </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="space-y-2 relative">
+                                <label className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Search Member</label>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <Input
+                                            placeholder="Search by name or email..."
+                                            value={memberEmail}
+                                            onChange={(e) => setMemberEmail(e.target.value)}
+                                            className="h-11 rounded-xl pr-10"
+                                            autoFocus
+                                        />
+                                        {isSearching && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
-                    <div className="pt-4 flex gap-3">
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            className="flex-1"
-                            onClick={() => setIsModalOpen(false)}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            className="flex-1"
-                            disabled={isSubmitting || !newGroupName}
-                        >
-                            {isSubmitting ? "Creating..." : "Create Group"}
-                        </Button>
-                    </div>
-                </form>
+                                {/* Search Results Dropdown */}
+                                {searchResults.length > 0 && (
+                                    <div className="absolute z-50 left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
+                                        {searchResults.map((user) => (
+                                            <button
+                                                key={user.id}
+                                                className="w-full flex items-center justify-between px-4 py-3 hover:bg-primary/5 transition-colors text-left border-b border-border last:border-0"
+                                                onClick={() => addMemberAction(user)}
+                                            >
+                                                <div>
+                                                    <p className="text-sm font-bold">{user.name}</p>
+                                                    <p className="text-[10px] text-muted-foreground">{user.email}</p>
+                                                </div>
+                                                <Plus className="w-4 h-4 text-primary" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {memberEmail.length > 1 && !isSearching && searchResults.length === 0 && (
+                                    <div className="absolute z-50 left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl p-4 text-center text-xs text-muted-foreground shadow-xl">
+                                        No users found for "{memberEmail}"
+                                    </div>
+                                )}
+                            </div>
+
+                            {addedMembers.length > 0 && (
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Selected Members ({addedMembers.length})</label>
+                                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                                        {addedMembers.map(member => (
+                                            <div key={member.id} className="flex items-center gap-2 bg-primary/5 text-primary px-3 py-1.5 rounded-full text-xs font-bold border border-border group">
+                                                <span className="truncate max-w-[120px]">{member.name}</span>
+                                                <button
+                                                    onClick={() => setAddedMembers(addedMembers.filter(m => m.id !== member.id))}
+                                                    className="hover:text-destructive transition-colors"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3 pt-4">
+                                <Button
+                                    variant="ghost"
+                                    className="flex-1 h-11 rounded-xl"
+                                    onClick={() => setGroupStep("info")}
+                                >
+                                    Back
+                                </Button>
+                                <Button
+                                    className="flex-[2] h-11 rounded-xl font-bold shadow-lg shadow-primary/20"
+                                    onClick={handleCreateGroup}
+                                    disabled={addedMembers.length === 0 || isSubmitting}
+                                >
+                                    {isSubmitting ? "Creating..." : "Create Group"}
+                                </Button>
+                            </div>
+                            <p className="text-[10px] text-center text-muted-foreground">Note: Search and select at least one friend to continue.</p>
+                        </div>
+                    )}
+                </div>
             </Modal>
         </div>
     );

@@ -11,32 +11,82 @@ import {
     Search
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-const stats = [
-    { label: "You are owed", value: "₹2,500", icon: ArrowUpRight, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-    { label: "You owe", value: "₹840", icon: ArrowDownLeft, color: "text-rose-500", bg: "bg-rose-500/10" },
-    { label: "Total Groups", value: "4 Active", icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
-    { label: "Total Expenses", value: "12 This Month", icon: Receipt, color: "text-purple-500", bg: "bg-purple-500/10" },
-];
+import { api } from "@/lib/api";
+
+interface SummaryData {
+    total_owed: number;
+    total_owe: number;
+    group_count: number;
+    recent_activity: {
+        id: string;
+        description: string;
+        amount: number;
+        date: string;
+        payer_name: string;
+        group_name: string;
+        type: 'lent' | 'borrowed';
+    }[];
+    friends: {
+        id: string;
+        name: string;
+        email: string;
+    }[];
+}
 
 export default function DashboardPage() {
+    const [data, setData] = React.useState<SummaryData | null>(null);
+    const [user, setUser] = React.useState<{ name: string } | null>(null);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const fetchDashboardData = async () => {
+            try {
+                const [summary, userData] = await Promise.all([
+                    api.get<SummaryData>("/summary/"),
+                    api.get<{ name: string }>("/users/me")
+                ]);
+                setData(summary);
+                setUser(userData);
+            } catch (error) {
+                console.error("Dashboard fetch failed:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchDashboardData();
+    }, []);
+
+    const stats = [
+        { label: "You are owed", value: `₹${(data?.total_owed || 0).toLocaleString()}`, icon: ArrowUpRight, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+        { label: "You owe", value: `₹${(data?.total_owe || 0).toLocaleString()}`, icon: ArrowDownLeft, color: "text-rose-500", bg: "bg-rose-500/10" },
+        { label: "Total Groups", value: `${data?.group_count || 0} Active`, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
+        { label: "Total Expenses", value: `${data?.recent_activity.length || 0} Recent`, icon: Receipt, color: "text-purple-500", bg: "bg-purple-500/10" },
+    ];
+
+    if (loading) {
+        return <div className="p-8 animate-pulse space-y-8">
+            <div className="h-8 bg-card rounded w-1/4" />
+            <div className="grid grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-card rounded-2xl" />)}
+            </div>
+            <div className="grid grid-cols-3 gap-8">
+                <div className="col-span-2 h-96 bg-card rounded-2xl" />
+                <div className="h-96 bg-card rounded-2xl" />
+            </div>
+        </div>;
+    }
+
     return (
         <div className="space-y-8">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-                    <p className="text-muted-foreground">Good afternoon, Devesh. Here&apos;s your expense summary.</p>
+                    <p className="text-muted-foreground">Welcome back, {user?.name.split(' ')[0] || 'User'}. Here&apos;s your expense summary.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="relative group hidden md:block">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                        <input
-                            type="text"
-                            placeholder="Search activity..."
-                            className="pl-10 pr-4 py-2 bg-secondary/50 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-64 transition-all"
-                        />
-                    </div>
                     <Button className="rounded-xl shadow-lg shadow-primary/20">
                         <Plus className="mr-2 h-4 w-4" />
                         New Expense
@@ -68,23 +118,26 @@ export default function DashboardPage() {
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-bold">Recent Activity</h2>
-                        <Button variant="ghost" size="sm" className="text-primary hover:text-primary">View all</Button>
                     </div>
                     <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                        {[1, 2, 3, 4].map((item, i) => (
-                            <div key={i} className="flex items-center justify-between p-4 border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
+                        {data?.recent_activity.length === 0 ? (
+                            <div className="p-8 text-center text-muted-foreground text-sm">No recent activity</div>
+                        ) : data?.recent_activity.map((item, i) => (
+                            <div key={item.id} className="flex items-center justify-between p-4 border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
                                         <Receipt className="w-5 h-5 text-muted-foreground" />
                                     </div>
                                     <div>
-                                        <h4 className="font-semibold text-sm">Dinner at Olive Garden</h4>
-                                        <p className="text-xs text-muted-foreground">In Food & Drinks • Yesterday</p>
+                                        <h4 className="font-semibold text-sm">{item.description}</h4>
+                                        <p className="text-xs text-muted-foreground">{item.group_name} • {new Date(item.date).toLocaleDateString()}</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="font-bold text-sm">₹1,240</p>
-                                    <p className="text-[10px] text-emerald-500 font-medium">You lent ₹620</p>
+                                    <p className="font-bold text-sm">₹{item.amount.toLocaleString()}</p>
+                                    <p className={cn("text-[10px] font-medium", item.type === 'lent' ? 'text-emerald-500' : 'text-rose-500')}>
+                                        {item.type === 'lent' ? 'You lent' : 'You borrowed'}
+                                    </p>
                                 </div>
                             </div>
                         ))}
@@ -95,21 +148,20 @@ export default function DashboardPage() {
                 <div className="space-y-4">
                     <h2 className="text-xl font-bold">Friends</h2>
                     <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
-                        {[1, 2, 3].map((_, i) => (
-                            <div key={i} className="flex items-center gap-3">
+                        {data?.friends.length === 0 ? (
+                            <div className="text-center py-4 text-xs text-muted-foreground">No friends added yet</div>
+                        ) : data?.friends.map((friend) => (
+                            <div key={friend.id} className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
-                                    DS
+                                    {friend.name.substring(0, 2).toUpperCase()}
                                 </div>
                                 <div className="flex-1">
-                                    <h4 className="text-sm font-semibold">Devesh Soni</h4>
-                                    <p className="text-xs text-rose-500 font-medium">owes you ₹250</p>
+                                    <h4 className="text-sm font-semibold">{friend.name}</h4>
+                                    <p className="text-[10px] text-muted-foreground truncate">{friend.email}</p>
                                 </div>
-                                <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs">Remind</Button>
+                                <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs">View</Button>
                             </div>
                         ))}
-                        <Button variant="secondary" className="w-full rounded-xl text-xs h-9">
-                            See more friends
-                        </Button>
                     </div>
                 </div>
             </div>

@@ -26,14 +26,36 @@ const navItems = [
     { name: "Settings", href: "/settings", icon: Settings },
 ];
 
+import { api } from "@/lib/api";
+
+interface SummaryData {
+    total_owed: number;
+    total_owe: number;
+}
+
 export function Sidebar() {
     const pathname = usePathname();
     const router = useRouter();
+    const [summary, setSummary] = React.useState<SummaryData | null>(null);
+
+    React.useEffect(() => {
+        const fetchSummary = async () => {
+            try {
+                const data = await api.get<SummaryData>("/summary/");
+                setSummary(data);
+            } catch (error) {
+                console.error("Sidebar summary fetch failed:", error);
+            }
+        };
+        fetchSummary();
+    }, [pathname]); // Refresh on navigation
 
     const handleLogout = () => {
         localStorage.removeItem("token");
         router.push("/login");
     };
+
+    const totalBalance = (summary?.total_owed || 0) - (summary?.total_owe || 0);
 
     return (
         <aside className="fixed left-0 top-0 h-screen w-64 border-r border-border bg-card flex flex-col z-40">
@@ -50,7 +72,12 @@ export function Sidebar() {
                 <div className="bg-primary/5 border border-primary/10 rounded-2xl p-4">
                     <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Total Balance</p>
                     <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-bold">₹2,450.00</h3>
+                        <h3 className={cn(
+                            "text-xl font-bold",
+                            totalBalance > 0 ? "text-emerald-500" : totalBalance < 0 ? "text-rose-500" : "text-foreground"
+                        )}>
+                            {totalBalance > 0 ? '+' : ''}₹{totalBalance.toLocaleString()}
+                        </h3>
                         <div className="bg-primary/10 p-1.5 rounded-lg">
                             <TrendingUp className="w-4 h-4 text-primary" />
                         </div>
@@ -58,11 +85,11 @@ export function Sidebar() {
                     <div className="mt-3 flex gap-2">
                         <div className="flex-1 bg-white/50 dark:bg-black/20 rounded-lg p-2 flex flex-col items-center">
                             <span className="text-[10px] text-muted-foreground font-medium">Owed</span>
-                            <span className="text-sm font-bold text-emerald-500">₹850</span>
+                            <span className="text-sm font-bold text-emerald-500">₹{(summary?.total_owed || 0).toLocaleString()}</span>
                         </div>
                         <div className="flex-1 bg-white/50 dark:bg-black/20 rounded-lg p-2 flex flex-col items-center">
                             <span className="text-[10px] text-muted-foreground font-medium">Owe</span>
-                            <span className="text-sm font-bold text-rose-500">₹250</span>
+                            <span className="text-sm font-bold text-rose-500">₹{(summary?.total_owe || 0).toLocaleString()}</span>
                         </div>
                     </div>
                 </div>

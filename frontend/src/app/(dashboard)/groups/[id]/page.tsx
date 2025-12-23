@@ -26,16 +26,21 @@ import { api } from "@/lib/api";
 
 interface Member {
     id: string;
-    name: string;
-    email: string;
-    is_admin: boolean;
+    user: {
+        id: string;
+        name: string;
+        email: string;
+    };
+    role: string;
 }
 
 interface Bill {
     id: string;
-    title: string;
-    amount: number;
-    payer_name: string;
+    description: string;
+    total_amount: number;
+    payer: {
+        name: string;
+    };
     created_at: string;
 }
 
@@ -57,6 +62,7 @@ export default function GroupDetailPage() {
 
     const [group, setGroup] = useState<GroupDetail | null>(null);
     const [loading, setLoading] = useState(true);
+    const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
 
     const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
     const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
@@ -69,8 +75,20 @@ export default function GroupDetailPage() {
     const [newMemberEmail, setNewMemberEmail] = useState("");
 
     React.useEffect(() => {
-        if (id) fetchGroupDetail();
+        if (id) {
+            fetchGroupDetail();
+            fetchCurrentUser();
+        }
     }, [id]);
+
+    const fetchCurrentUser = async () => {
+        try {
+            const user = await api.get<{ id: string }>("/users/me");
+            setCurrentUser(user);
+        } catch (error) {
+            console.error("Failed to fetch current user profile:", error);
+        }
+    };
 
     const fetchGroupDetail = async () => {
         try {
@@ -89,10 +107,10 @@ export default function GroupDetailPage() {
         try {
             await api.post("/bills/", {
                 group_id: id,
-                title: billTitle,
-                amount: parseFloat(billAmount),
-                category: billCategory,
-                splitting_method: "equal"
+                description: billTitle,
+                total_amount: parseFloat(billAmount),
+                split_type: "EQUAL",
+                shares: members.map(m => ({ user_id: m.user.id }))
             });
             setIsAddExpenseOpen(false);
             setBillTitle("");
@@ -105,7 +123,55 @@ export default function GroupDetailPage() {
         }
     };
 
-    const handleAddMember = async (e: React.FormEvent) => {
+    interface SearchUser {
+        id: string;
+        name: string;
+        email: string;
+    }
+
+    const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+
+    // Search logic
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            if (newMemberEmail.length > 1) {
+                handleSearch(newMemberEmail);
+            } else {
+                setSearchResults([]);
+            }
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [newMemberEmail]);
+
+    const handleSearch = async (query: string) => {
+        setIsSearching(true);
+        try {
+            const results = await api.get<SearchUser[]>(`/users/search?q=${query}`);
+            setSearchResults(results);
+        } catch (error) {
+            console.error("Search failed:", error);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const handleInviteUser = async (user: SearchUser) => {
+        try {
+            await api.post(`/groups/${id}/members`, {
+                email: user.email
+            });
+            setIsAddMemberOpen(false);
+            setNewMemberEmail("");
+            setSearchResults([]);
+            fetchGroupDetail();
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Failed to add member");
+        }
+    };
+
+    const handleAddMemberByEmail = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
             await api.post(`/groups/${id}/members`, {
@@ -113,6 +179,7 @@ export default function GroupDetailPage() {
             });
             setIsAddMemberOpen(false);
             setNewMemberEmail("");
+            setSearchResults([]);
             fetchGroupDetail();
         } catch (error) {
             alert(error instanceof Error ? error.message : "Failed to add member");
@@ -143,8 +210,8 @@ export default function GroupDetailPage() {
 
     if (!group) return <div className="p-8">Group not found</div>;
 
-    const members = group.members;
-    const bills = group.bills;
+    const members = group.members || [];
+    const bills = group.bills || [];
 
     return (
         <div className="space-y-8">
@@ -164,7 +231,6 @@ export default function GroupDetailPage() {
                     <div className="space-y-2">
                         <div className="flex items-center gap-3">
                             <h1 className="text-4xl font-extrabold tracking-tight italic uppercase">{group.name}</h1>
-                            <span className="px-3 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded-full uppercase tracking-widest">{group.type}</span>
                         </div>
                         <p className="text-muted-foreground flex items-center gap-2">
                             <Users className="w-4 h-4" /> {members.length} members
@@ -198,9 +264,15 @@ export default function GroupDetailPage() {
                         <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">Your Balance</p>
                         <p className={cn(
                             "text-2xl font-black",
-                            group.user_balance >= 0 ? "text-emerald-500" : "text-rose-500"
+                            Math.abs(group.user_balance || 0) < 0.01
+                                ? "text-muted-foreground"
+                                : group.user_balance > 0
+                                    ? "text-emerald-500"
+                                    : "text-rose-500"
                         )}>
-                            {group.user_balance >= 0 ? '+' : '-'}₹{Math.abs(group.user_balance || 0).toLocaleString()}
+                            {Math.abs(group.user_balance || 0) < 0.01
+                                ? ''
+                                : group.user_balance > 0 ? '+' : '-'}₹{Math.abs(group.user_balance || 0).toLocaleString()}
                         </p>
                     </div>
                 </div>
@@ -229,25 +301,28 @@ export default function GroupDetailPage() {
                                 <div key={member.id} className="flex items-center justify-between group">
                                     <div className="flex items-center gap-3">
                                         <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-[10px]">
-                                            {member.name ? member.name.substring(0, 2).toUpperCase() : '??'}
+                                            {member.user?.name ? member.user.name.substring(0, 2).toUpperCase() : '??'}
                                         </div>
                                         <div>
-                                            <p className="text-sm font-semibold leading-none">{member.name || 'Invited User'}</p>
-                                            <p className="text-[10px] text-muted-foreground mt-1">{member.email}</p>
+                                            <p className="text-sm font-semibold leading-none">{member.user?.name || 'Invited User'}</p>
+                                            <p className="text-[10px] text-muted-foreground mt-1">{member.user?.email}</p>
                                         </div>
                                     </div>
-                                    {member.is_admin ? (
-                                        <Shield className="w-3 h-3 text-primary" />
-                                    ) : (
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="opacity-0 group-hover:opacity-100 h-7 w-7 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                            onClick={() => removeMember(member.id)}
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </Button>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                        {member.role === 'ADMIN' && (
+                                            <Shield className="w-3 h-3 text-primary" />
+                                        )}
+                                        {member.user?.id !== currentUser?.id && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="opacity-0 group-hover:opacity-100 h-7 w-7 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                                                onClick={() => removeMember(member.id)}
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -290,14 +365,14 @@ export default function GroupDetailPage() {
                                             <Receipt className="w-5 h-5 text-muted-foreground" />
                                         </div>
                                         <div>
-                                            <h4 className="font-bold text-sm tracking-tight">{bill.title}</h4>
-                                            <p className="text-[10px] text-muted-foreground">Paid by <span className="font-semibold text-foreground/80">{bill.payer_name}</span> • {new Date(bill.created_at).toLocaleDateString()}</p>
+                                            <h4 className="font-bold text-sm tracking-tight">{bill.description}</h4>
+                                            <p className="text-[10px] text-muted-foreground">Paid by <span className="font-semibold text-foreground/80">{bill.payer?.name || 'Unknown'}</span> • {new Date(bill.created_at).toLocaleDateString()}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-base font-black">₹{bill.amount.toLocaleString()}</p>
+                                        <p className="text-base font-black">₹{bill.total_amount.toLocaleString()}</p>
                                         <p className="text-[10px] text-muted-foreground font-medium uppercase">
-                                            Share: ₹{(bill.amount / members.length).toFixed(0)}
+                                            Share: ₹{(bill.total_amount / (members.length || 1)).toFixed(0)}
                                         </p>
                                     </div>
                                 </div>
@@ -391,44 +466,69 @@ export default function GroupDetailPage() {
                 title="Invite Member"
                 description="Share the group and split expenses with someone new."
             >
-                <form onSubmit={handleAddMember} className="space-y-6">
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">Email Address</label>
+                <form onSubmit={handleAddMemberByEmail} className="space-y-6">
+                    <div className="space-y-2 relative">
+                        <label className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Search by name or email</label>
                         <div className="relative">
                             <Input
-                                placeholder="friend@example.com"
-                                type="email"
+                                placeholder="e.g. root@root.com"
+                                type="text"
                                 value={newMemberEmail}
                                 onChange={(e) => setNewMemberEmail(e.target.value)}
-                                className="pr-12"
+                                className="pr-12 h-12 rounded-xl"
                                 autoFocus
                             />
-                            <Button
-                                size="sm"
-                                className="absolute right-1 top-1 h-8 rounded-lg"
-                                disabled={!newMemberEmail}
-                                type="submit"
-                            >
-                                Add
-                            </Button>
+                            {isSearching ? (
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                    <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                </div>
+                            ) : (
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 rounded-lg text-primary"
+                                    disabled={!newMemberEmail}
+                                    type="submit"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                </Button>
+                            )}
                         </div>
+
+                        {/* Search Results Dropdown */}
+                        {searchResults.length > 0 && (
+                            <div className="absolute z-50 left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                {searchResults.map((user) => (
+                                    <button
+                                        key={user.id}
+                                        type="button"
+                                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-primary/5 transition-colors text-left border-b border-border last:border-0"
+                                        onClick={() => handleInviteUser(user)}
+                                    >
+                                        <div>
+                                            <p className="text-sm font-bold">{user.name}</p>
+                                            <p className="text-[10px] text-muted-foreground tracking-tight">{user.email}</p>
+                                        </div>
+                                        <div className="bg-primary/10 p-1.5 rounded-lg">
+                                            <Plus className="w-3 h-3 text-primary" />
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {newMemberEmail.length > 1 && !isSearching && searchResults.length === 0 && (
+                            <div className="absolute z-50 left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl p-4 text-center text-xs text-muted-foreground shadow-xl">
+                                No users found for "{newMemberEmail}"
+                            </div>
+                        )}
                     </div>
 
-                    <div className="pt-2">
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold mb-3 tracking-widest">Suggestions</p>
-                        <div className="space-y-2">
-                            {["Akash Gupta", "Priya Sharma"].map((name) => (
-                                <div key={name} className="flex items-center justify-between p-2 hover:bg-secondary rounded-xl cursor-pointer transition-colors group">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-7 h-7 bg-secondary rounded-full flex items-center justify-center text-[10px] font-bold">
-                                            {name.split(' ').map(n => n[0]).join('')}
-                                        </div>
-                                        <span className="text-xs font-semibold">{name}</span>
-                                    </div>
-                                    <Plus className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
-                                </div>
-                            ))}
-                        </div>
+                    <div className="pt-2 border-t border-border">
+                        <p className="text-[10px] text-muted-foreground uppercase font-black mb-3 tracking-[0.2em] opacity-60">How to invite</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                            Type your friend's name or email address. If they are already on Rupaya, you can select them from the list. If not, you can still add them by typing their full email.
+                        </p>
                     </div>
                 </form>
             </Modal>
