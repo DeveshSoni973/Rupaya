@@ -100,10 +100,10 @@ class GroupService:
 
         groups = []
         for membership in memberships:
-            group = membership.group
+            group_data = membership.group.model_dump()
             # Calculate balance for this specific group
-            group.user_balance = await self._calculate_user_balance(str(group.id), user_id)
-            groups.append(group)
+            group_data["user_balance"] = await self._calculate_user_balance(str(membership.group.id), user_id)
+            groups.append(group_data)
 
         return groups
 
@@ -116,15 +116,30 @@ class GroupService:
             where={"id": group_id},
             include={
                 "members": {"include": {"user": True}, "where": {"deleted_at": None}},
-                "bills": {"include": {"payer": True}, "where": {"deleted_at": None}, "order_by": {"created_at": "desc"}},
+                "bills": {
+                    "include": {"payer": True, "shares": {"include": {"user": True}}},
+                    "where": {"deleted_at": None},
+                    "order_by": {"created_at": "desc"},
+                },
             },
         )
 
-        # Calculate additional fields
-        group.user_balance = await self._calculate_user_balance(group_id, user_id)
-        group.total_spent = await self._calculate_total_spent(group_id)
+        # Convert to dictionary to add dynamic fields
+        group_data = group.model_dump()
+        group_data["user_balance"] = await self._calculate_user_balance(
+            group_id, user_id
+        )
+        group_data["total_spent"] = await self._calculate_total_spent(group_id)
 
-        return group
+        # Include nested relations as they might not be fully captured by basic model_dump depending on depth
+        group_data["members"] = (
+            [m.model_dump() for m in group.members] if group.members else []
+        )
+        group_data["bills"] = (
+            [b.model_dump() for b in group.bills] if group.bills else []
+        )
+
+        return group_data
 
     async def _calculate_user_balance(self, group_id: str, user_id: str) -> float:
         # 1. How much others owe you in this group (You paid, they haven't settled)
@@ -144,7 +159,9 @@ class GroupService:
         total_owed = sum(item["_sum"]["amount"] or 0 for item in owed_result)
 
         # 2. How much you owe others in this group (They paid, you haven't settled)
-        owe_result = await prisma.billshare.find_many(
+        owe_result = await prisma.billshare.group_by(
+            by=["user_id"],
+            sum={"amount": True},
             where={
                 "bill": {
                     "group_id": group_id,
@@ -155,16 +172,19 @@ class GroupService:
                 "paid": False
             }
         )
-        total_owe = sum(item.amount or 0 for item in owe_result)
+        total_owe = sum(item["_sum"]["amount"] or 0 for item in owe_result)
 
         return total_owed - total_owe
 
     async def _calculate_total_spent(self, group_id: str) -> float:
-        result = await prisma.bill.aggregate(
+        result = await prisma.bill.group_by(
+            by=["group_id"],
             sum={"total_amount": True},
             where={"group_id": group_id, "deleted_at": None}
         )
-        return result["_sum"]["total_amount"] or 0
+        if not result:
+            return 0.0
+        return result[0]["_sum"]["total_amount"] or 0.0
 
     async def add_member_to_group(
         self, group_id: str, data: AddMemberRequest, added_by_id: str

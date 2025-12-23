@@ -54,7 +54,6 @@ interface GroupDetail {
     user_balance: number;
 }
 
-const categories = ["Food", "Travel", "Home", "Social", "Other"];
 
 export default function GroupDetailPage() {
     const params = useParams();
@@ -69,7 +68,8 @@ export default function GroupDetailPage() {
 
     const [billTitle, setBillTitle] = useState("");
     const [billAmount, setBillAmount] = useState("");
-    const [billCategory, setBillCategory] = useState("Home");
+    const [payerId, setPayerId] = useState<string>("");
+    const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
     const [isSubmittingBill, setIsSubmittingBill] = useState(false);
 
     const [newMemberEmail, setNewMemberEmail] = useState("");
@@ -85,8 +85,9 @@ export default function GroupDetailPage() {
         try {
             const user = await api.get<{ id: string }>("/users/me");
             setCurrentUser(user);
+            setPayerId(user.id);
         } catch (error) {
-            console.error("Failed to fetch current user profile:", error);
+            console.error("Failed to fetch current user:", error);
         }
     };
 
@@ -94,8 +95,9 @@ export default function GroupDetailPage() {
         try {
             const data = await api.get<GroupDetail>(`/groups/${id}`);
             setGroup(data);
+            setSelectedMemberIds((data.members || []).map(m => m.user.id));
         } catch (error) {
-            console.error("Failed to fetch group details:", error);
+            console.error("Failed to fetch group:", error);
         } finally {
             setLoading(false);
         }
@@ -104,13 +106,20 @@ export default function GroupDetailPage() {
     const handleAddBill = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmittingBill(true);
+        if (selectedMemberIds.length === 0) {
+            alert("Please select at least one person to split with.");
+            setIsSubmittingBill(false);
+            return;
+        }
+
         try {
             await api.post("/bills/", {
                 group_id: id,
                 description: billTitle,
                 total_amount: parseFloat(billAmount),
+                paid_by: payerId,
                 split_type: "EQUAL",
-                shares: members.map(m => ({ user_id: m.user.id }))
+                shares: selectedMemberIds.map(uid => ({ user_id: uid }))
             });
             setIsAddExpenseOpen(false);
             setBillTitle("");
@@ -429,31 +438,80 @@ export default function GroupDetailPage() {
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Category</label>
-                            <div className="flex flex-wrap gap-2">
-                                {categories.map((cat) => (
+                        <div className="pt-4 border-t border-border space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Who paid?</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {members.map((member) => (
+                                        <button
+                                            key={member.user.id}
+                                            type="button"
+                                            onClick={() => setPayerId(member.user.id)}
+                                            className={cn(
+                                                "flex items-center gap-2 p-2 rounded-xl border text-sm transition-all text-left",
+                                                payerId === member.user.id
+                                                    ? "bg-primary border-primary text-white shadow-md shadow-primary/20"
+                                                    : "bg-secondary/50 border-border text-muted-foreground hover:border-primary/40"
+                                            )}
+                                        >
+                                            <div className="w-6 h-6 shrink-0 rounded-full bg-background/20 flex items-center justify-center text-[10px] font-bold">
+                                                {member.user.name.substring(0, 2).toUpperCase()}
+                                            </div>
+                                            <span className="truncate">{member.user.id === currentUser?.id ? "You" : member.user.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium flex justify-between items-center">
+                                    <span>Split with whom?</span>
                                     <button
-                                        key={cat}
                                         type="button"
-                                        onClick={() => setBillCategory(cat)}
-                                        className={cn(
-                                            "px-4 py-1.5 rounded-full text-xs font-bold transition-all border",
-                                            billCategory === cat
-                                                ? "bg-primary border-primary text-white"
-                                                : "bg-secondary/50 border-border text-muted-foreground hover:border-primary/40"
-                                        )}
+                                        onClick={() => setSelectedMemberIds(members.map(m => m.user.id))}
+                                        className="text-[10px] uppercase tracking-wider font-bold text-primary hover:underline"
                                     >
-                                        {cat}
+                                        Select All
                                     </button>
-                                ))}
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {members.map((member) => (
+                                        <button
+                                            key={member.user.id}
+                                            type="button"
+                                            onClick={() => {
+                                                if (selectedMemberIds.includes(member.user.id)) {
+                                                    setSelectedMemberIds(selectedMemberIds.filter(id => id !== member.user.id));
+                                                } else {
+                                                    setSelectedMemberIds([...selectedMemberIds, member.user.id]);
+                                                }
+                                            }}
+                                            className={cn(
+                                                "flex items-center gap-2 p-2 rounded-xl border text-sm transition-all text-left",
+                                                selectedMemberIds.includes(member.user.id)
+                                                    ? "bg-primary/10 border-primary text-primary"
+                                                    : "bg-secondary/50 border-border text-muted-foreground opacity-50"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "w-4 h-4 rounded-md border flex items-center justify-center transition-all",
+                                                selectedMemberIds.includes(member.user.id)
+                                                    ? "bg-primary border-primary text-white"
+                                                    : "border-muted-foreground"
+                                            )}>
+                                                {selectedMemberIds.includes(member.user.id) && <Plus className="w-3 h-3" />}
+                                            </div>
+                                            <span className="truncate">{member.user.id === currentUser?.id ? "You" : member.user.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <div className="pt-4 flex gap-3">
-                        <Button variant="ghost" className="flex-1 rounded-xl" onClick={() => setIsAddExpenseOpen(false)}>Cancel</Button>
-                        <Button className="flex-1 rounded-xl shadow-lg shadow-primary/20" disabled={isSubmittingBill}>
+                        <Button type="button" variant="ghost" className="flex-1 rounded-xl" onClick={() => setIsAddExpenseOpen(false)}>Cancel</Button>
+                        <Button type="submit" className="flex-1 rounded-xl shadow-lg shadow-primary/20" disabled={isSubmittingBill}>
                             {isSubmittingBill ? "Saving..." : "Split Expense"}
                         </Button>
                     </div>

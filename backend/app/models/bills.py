@@ -25,6 +25,7 @@ class BillShareResponse(BillShareBase):
     id: UUID
     paid: bool
     amount: float  # Ensure it's returned in the response
+    user: UserOut
 
     class Config:
         from_attributes = True

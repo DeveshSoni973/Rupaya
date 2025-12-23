@@ -25,6 +25,7 @@ class GroupOut(BaseModel):
     description: str | None
     created_by: str | None
     created_at: datetime
+    user_balance: float | None = 0.0
 
     class Config:
         from_attributes = True
@@ -40,6 +41,7 @@ class GroupMemberOut(BaseModel):
 class GroupDetailOut(GroupOut):
     members: list[GroupMemberOut]
     bills: list[BillResponse] = []
+    total_spent: float | None = 0.0
 
 
 class AddMemberRequest(BaseModel):
