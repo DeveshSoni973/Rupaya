@@ -70,6 +70,8 @@ export default function GroupDetailPage() {
     const [billAmount, setBillAmount] = useState("");
     const [payerId, setPayerId] = useState<string>("");
     const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+    const [splitType, setSplitType] = useState<"EQUAL" | "EXACT">("EQUAL");
+    const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
     const [isSubmittingBill, setIsSubmittingBill] = useState(false);
 
     const [newMemberEmail, setNewMemberEmail] = useState("");
@@ -112,14 +114,26 @@ export default function GroupDetailPage() {
             return;
         }
 
+        if (splitType === "EXACT") {
+            const total = Object.values(exactAmounts).reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0);
+            if (Math.abs(total - parseFloat(billAmount)) > 0.01) {
+                alert(`The total of all shares (₹${total}) must equal the bill amount (₹${billAmount})`);
+                setIsSubmittingBill(false);
+                return;
+            }
+        }
+
         try {
             await api.post("/bills/", {
                 group_id: id,
                 description: billTitle,
                 total_amount: parseFloat(billAmount),
                 paid_by: payerId,
-                split_type: "EQUAL",
-                shares: selectedMemberIds.map(uid => ({ user_id: uid }))
+                split_type: splitType,
+                shares: selectedMemberIds.map(uid => ({
+                    user_id: uid,
+                    amount: splitType === "EXACT" ? parseFloat(exactAmounts[uid] || "0") : undefined
+                }))
             });
             setIsAddExpenseOpen(false);
             setBillTitle("");
@@ -438,7 +452,7 @@ export default function GroupDetailPage() {
                             </div>
                         </div>
 
-                        <div className="pt-4 border-t border-border space-y-4">
+                        <div className="pt-4 border-t border-border space-y-6">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Who paid?</label>
                                 <div className="grid grid-cols-2 gap-2">
@@ -463,47 +477,108 @@ export default function GroupDetailPage() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium flex justify-between items-center">
-                                    <span>Split with whom?</span>
-                                    <button
-                                        type="button"
-                                        onClick={() => setSelectedMemberIds(members.map(m => m.user.id))}
-                                        className="text-[10px] uppercase tracking-wider font-bold text-primary hover:underline"
-                                    >
-                                        Select All
-                                    </button>
-                                </label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {members.map((member) => (
+                            <div className="space-y-4 pt-4 border-t border-border">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium">Split Logic</label>
+                                    <div className="flex bg-secondary/50 p-1 rounded-lg">
                                         <button
-                                            key={member.user.id}
                                             type="button"
-                                            onClick={() => {
-                                                if (selectedMemberIds.includes(member.user.id)) {
-                                                    setSelectedMemberIds(selectedMemberIds.filter(id => id !== member.user.id));
-                                                } else {
-                                                    setSelectedMemberIds([...selectedMemberIds, member.user.id]);
-                                                }
-                                            }}
+                                            onClick={() => setSplitType("EQUAL")}
                                             className={cn(
-                                                "flex items-center gap-2 p-2 rounded-xl border text-sm transition-all text-left",
-                                                selectedMemberIds.includes(member.user.id)
-                                                    ? "bg-primary/10 border-primary text-primary"
-                                                    : "bg-secondary/50 border-border text-muted-foreground opacity-50"
+                                                "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all",
+                                                splitType === "EQUAL" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"
                                             )}
                                         >
-                                            <div className={cn(
-                                                "w-4 h-4 rounded-md border flex items-center justify-center transition-all",
-                                                selectedMemberIds.includes(member.user.id)
-                                                    ? "bg-primary border-primary text-white"
-                                                    : "border-muted-foreground"
-                                            )}>
-                                                {selectedMemberIds.includes(member.user.id) && <Plus className="w-3 h-3" />}
-                                            </div>
-                                            <span className="truncate">{member.user.id === currentUser?.id ? "You" : member.user.name}</span>
+                                            Equally
                                         </button>
-                                    ))}
+                                        <button
+                                            type="button"
+                                            onClick={() => setSplitType("EXACT")}
+                                            className={cn(
+                                                "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all",
+                                                splitType === "EXACT" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"
+                                            )}
+                                        >
+                                            Exactly
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium flex justify-between items-center">
+                                        <span>{splitType === "EQUAL" ? "Split with whom?" : "Amount per person"}</span>
+                                        {splitType === "EQUAL" && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedMemberIds(members.map(m => m.user.id))}
+                                                className="text-[10px] uppercase tracking-wider font-bold text-primary hover:underline"
+                                            >
+                                                Select All
+                                            </button>
+                                        )}
+                                    </label>
+
+                                    <div className="space-y-2">
+                                        {members.map((member) => (
+                                            <div key={member.user.id} className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (selectedMemberIds.includes(member.user.id)) {
+                                                            setSelectedMemberIds(selectedMemberIds.filter(id => id !== member.user.id));
+                                                        } else {
+                                                            setSelectedMemberIds([...selectedMemberIds, member.user.id]);
+                                                        }
+                                                    }}
+                                                    className={cn(
+                                                        "flex-1 flex items-center gap-2 p-3 rounded-xl border text-sm transition-all text-left",
+                                                        selectedMemberIds.includes(member.user.id)
+                                                            ? "bg-primary/5 border-primary/30 text-foreground"
+                                                            : "bg-secondary/20 border-border text-muted-foreground opacity-60"
+                                                    )}
+                                                >
+                                                    <div className={cn(
+                                                        "w-4 h-4 rounded-md border flex items-center justify-center transition-all",
+                                                        selectedMemberIds.includes(member.user.id)
+                                                            ? "bg-primary border-primary text-white"
+                                                            : "border-muted-foreground"
+                                                    )}>
+                                                        {selectedMemberIds.includes(member.user.id) && <Plus className="w-2.5 h-2.5" />}
+                                                    </div>
+                                                    <span className="truncate">{member.user.id === currentUser?.id ? "You" : member.user.name}</span>
+                                                </button>
+
+                                                {splitType === "EXACT" && selectedMemberIds.includes(member.user.id) && (
+                                                    <div className="relative w-32">
+                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₹</span>
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            className="pl-7 h-full rounded-xl"
+                                                            value={exactAmounts[member.user.id] || ""}
+                                                            onChange={(e) => setExactAmounts({
+                                                                ...exactAmounts,
+                                                                [member.user.id]: e.target.value
+                                                            })}
+                                                            required
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {splitType === "EXACT" && (
+                                        <div className={cn(
+                                            "mt-4 p-3 rounded-xl text-xs font-medium flex justify-between items-center",
+                                            Math.abs((Object.values(exactAmounts).reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0)) - parseFloat(billAmount)) < 0.01
+                                                ? "bg-emerald-500/10 text-emerald-600"
+                                                : "bg-rose-500/10 text-rose-600"
+                                        )}>
+                                            <span>Matched: ₹{Object.values(exactAmounts).reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0)}</span>
+                                            <span>Remaining: ₹{(parseFloat(billAmount || "0") - Object.values(exactAmounts).reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0)).toFixed(2)}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
