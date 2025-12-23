@@ -37,7 +37,10 @@ class BillService:
                 "created_by": user_id,
                 "shares": {"create": shares_create},
             },
-            include={"shares": True},
+            include={
+                "shares": {"include": {"user": True}},
+                "payer": True,
+            },
         )
 
         return bill
@@ -88,7 +91,10 @@ class BillService:
 
         bills = await prisma.bill.find_many(
             where={"group_id": group_id},
-            include={"shares": True},
+            include={
+                "shares": {"include": {"user": True}},
+                "payer": True,
+            },
             order={"created_at": "desc"},
         )
         return bills
@@ -98,7 +104,13 @@ class BillService:
         Get details of a specific bill.
         Verifies that the user has access via group membership.
         """
-        bill = await prisma.bill.find_unique(where={"id": bill_id}, include={"shares": True})
+        bill = await prisma.bill.find_unique(
+            where={"id": bill_id},
+            include={
+                "shares": {"include": {"user": True}},
+                "payer": True,
+            },
+        )
 
         if not bill:
             raise NotFoundError("Bill not found")
@@ -136,6 +148,7 @@ class BillService:
         updated_share = await prisma.billshare.update(
             where={"id": share_id},
             data={"paid": True, "updated_by": user_id, "updated_at": datetime.utcnow()},
+            include={"user": True},
         )
 
         return updated_share
@@ -168,6 +181,7 @@ class BillService:
         updated_share = await prisma.billshare.update(
             where={"id": share_id},
             data={"paid": False, "updated_by": user_id, "updated_at": datetime.utcnow()},
+            include={"user": True},
         )
 
         return updated_share
