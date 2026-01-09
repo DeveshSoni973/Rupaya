@@ -1,4 +1,4 @@
-# Rupaya - Expense Splitting Backend
+# Rupaya - Expense Splitting Backend 
 
 Rupaya is a backend service for a bill-splitting and expense-tracking application. It provides a robust API to manage users, groups, bills, and shared expenses.
 
