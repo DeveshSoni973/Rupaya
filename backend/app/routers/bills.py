@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends, status
 from app.models.bills import BillCreate, BillResponse, BillShareResponse
 from app.models.pagination import PaginatedResponse
 from app.models.users import UserOut
+from app.routers.groups import get_group_service
 from app.services.auth_service import get_current_user
 from app.services.bill_service import BillService
 from app.services.group_service import GroupService
-from app.routers.groups import get_group_service
 
 router = APIRouter(prefix="/bills", tags=["Bills"])
 
@@ -32,8 +32,8 @@ async def create_bill(
     return await service.create_bill(current_user.id, data)
 
 
-@router.get("/activity", response_model=PaginatedResponse[BillResponse])
-async def get_user_activity(
+@router.get("/", response_model=PaginatedResponse[BillResponse])
+async def get_user_bills(
     skip: int = 0,
     limit: int = 20,
     current_user: UserOut = Depends(get_current_user),
@@ -42,7 +42,7 @@ async def get_user_activity(
     """
     Get all bills involving the current user with pagination.
     """
-    return await service.get_user_activity(current_user.id, skip, limit)
+    return await service.get_user_bills(current_user.id, skip, limit)
 
 
 @router.get("/group/{group_id}", response_model=PaginatedResponse[BillResponse])

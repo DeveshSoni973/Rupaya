@@ -16,7 +16,6 @@ from app.services.group_service import GroupService
 
 router = APIRouter(prefix="/groups", tags=["Groups"])
 
-
 group_service = GroupService()
 
 
@@ -45,7 +44,10 @@ async def get_user_groups(
     Get all groups for the current user with search and pagination metadata.
     """
     return await service.get_user_groups(
-        user_id=current_user.id, search=search, skip=skip, limit=limit
+        user_id=current_user.id,
+        search=search,
+        skip=skip,
+        limit=limit,
     )
 
 
@@ -55,6 +57,9 @@ async def get_group(
     current_user: UserOut = Depends(get_current_user),
     service: GroupService = Depends(get_group_service),
 ):
+    """
+    Get group details (members only).
+    """
     return await service.get_group_detail(str(group_id), current_user.id)
 
 
