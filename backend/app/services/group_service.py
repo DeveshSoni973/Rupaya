@@ -7,6 +7,7 @@ from app.models.groups import AddMemberRequest, GroupCreate
 
 
 class GroupService:
+    # auth helper
     async def check_is_member(self, user_id: str, group_id: str):
         """
         Verify if a user is an active member of a group.
@@ -14,23 +15,18 @@ class GroupService:
         Returns the membership record if valid.
         """
         member = await prisma.groupmember.find_first(
-            where={"user_id": user_id, "group_id": group_id, "deleted_at": None}
+            where={
+                "user_id": user_id,
+                "group_id": group_id,
+                "deleted_at": None,
+            }
         )
-
         if not member:
             raise ForbiddenError("User is not a member of this group")
         return member
 
     async def check_is_admin(self, user_id: str, group_id: str):
-        """
-        Verify if a user is an admin of a group.
-        Raises 403 if not an admin.
-        Returns the membership record if valid.
-        """
-        # First check if user is a member at all
         member = await self.check_is_member(user_id, group_id)
-
-        # Then verify they have admin role
         if member.role != "ADMIN":
             raise ForbiddenError("Only group admins can perform this action")
         return member
@@ -39,7 +35,6 @@ class GroupService:
         if not data.initial_members:
             raise ValidationError("A group must have at least one other member.")
 
-        # Create the group
         group = await prisma.group.create(
             data={
                 "name": data.name,
@@ -48,7 +43,7 @@ class GroupService:
             }
         )
 
-        # 1. Add creator as admin
+        # creator = admin
         await prisma.groupmember.create(
             data={
                 "user_id": creator_id,
@@ -58,14 +53,10 @@ class GroupService:
             }
         )
 
-        # 2. Add initial members
         added_count = 0
         for email in data.initial_members:
             user = await prisma.user.find_unique(where={"email": email})
-            if not user:
-                continue
-
-            if user.id == creator_id:
+            if not user or user.id == creator_id:
                 continue
 
             await prisma.groupmember.create(
@@ -79,12 +70,14 @@ class GroupService:
             added_count += 1
 
         if added_count == 0:
-            # Clean up the group if no one else could be added
             await prisma.group.delete(where={"id": group.id})
             raise ValidationError("A group must have at least one other valid member.")
 
         return group
 
+    # -------------------------
+    # READ OPERATIONS
+    # -------------------------
     async def get_user_groups(
         self, user_id: str, search: str | None = None, skip: int = 0, limit: int = 20
     ):
@@ -92,13 +85,12 @@ class GroupService:
         where_filter = {
             "user_id": user_id,
             "deleted_at": None,
-            "group": {"deleted_at": None},  # Ensure the group itself isn't deleted
+            "group": {"deleted_at": None},
         }
-        # 2. Add Search Utility
+
         if search:
-            # We apply the search on the related 'group' record
             where_filter["group"] = {
-                "is": {  # 'is' is used for nested object filtering in Prisma
+                "is": {
                     "deleted_at": None,
                     "OR": [
                         {"name": {"contains": search, "mode": "insensitive"}},
@@ -115,10 +107,8 @@ class GroupService:
                 }
             }
 
-        # 3. Get total count and the paginated records
-        # 3. Get total count and the paginated records
-        # Running sequentially is the simplest alternative if you prefer not to use asyncio.gather
         total = await prisma.groupmember.count(where=where_filter)
+
         memberships = await prisma.groupmember.find_many(
             where=where_filter,
             include={
@@ -136,26 +126,8 @@ class GroupService:
             order={"created_at": "desc"},
         )
 
-        # 4. Transform the data and calculate balances
-        groups = []
-        for membership in memberships:
-            if not membership.group:
-                continue
-            # membership.group contains the actual group data
-            group_data = membership.group.model_dump()
+        groups = [m.group.model_dump() for m in memberships if m.group]
 
-            # Calculate the user's personal balance in this group
-            metrics = await self._calculate_user_balance_metrics(
-                str(membership.group.id), user_id
-            )
-            group_data.update({
-                "user_balance": metrics["balance"],
-                "total_owed": metrics["total_owed"],
-                "total_owe": metrics["total_owe"]
-            })
-            groups.append(group_data)
-
-        # 5. Return the PaginatedResponse structure
         return {
             "items": groups,
             "total": total,
@@ -165,138 +137,83 @@ class GroupService:
         }
 
     async def get_group_detail(self, group_id: str, user_id: str):
-        # Verify user has access to this group
         await self.check_is_member(user_id, group_id)
 
-        # Get group with members and bills (limited to first 10 for performance)
         group = await prisma.group.find_unique(
             where={"id": group_id},
             include={
-                "members": {"include": {"user": True}, "where": {"deleted_at": None}},
-                "bills": {
-                    "include": {"payer": True, "shares": {"include": {"user": True}}},
+                "members": {
+                    "include": {"user": True},
                     "where": {"deleted_at": None},
-                    "order_by": {"created_at": "desc"},
-                    "take": 10,
-                },
+                }
             },
         )
 
-        # Convert to dictionary to add dynamic fields
-        group_data = group.model_dump()
-        metrics = await self._calculate_user_balance_metrics(group_id, user_id)
-        group_data.update({
-            "user_balance": metrics["balance"],
-            "total_owed": metrics["total_owed"],
-            "total_owe": metrics["total_owe"]
-        })
-        group_data["total_spent"] = await self._calculate_total_spent(group_id)
+        if not group:
+            raise NotFoundError("Group not found")
 
-        # Include nested relations as they might not be fully captured by basic model_dump depending on depth
-        group_data["members"] = [m.model_dump() for m in group.members] if group.members else []
-        group_data["bills"] = [b.model_dump() for b in group.bills] if group.bills else []
+        data = group.model_dump()
+        data["members"] = [m.model_dump() for m in group.members]
 
-        return group_data
+        return data
 
-    async def _calculate_user_balance_metrics(self, group_id: str, user_id: str) -> dict:
-        # 1. How much others owe you in this group (You paid, they haven't settled)
-        owed_result = await prisma.billshare.group_by(
-            by=["user_id"],
-            sum={"amount": True},
-            where={
-                "bill": {"group_id": group_id, "paid_by": user_id, "deleted_at": None},
-                "user_id": {"not": user_id},
-                "paid": False,
-            },
-        )
-        total_owed = sum(item["_sum"]["amount"] or 0 for item in owed_result)
-
-        # 2. How much you owe others in this group (They paid, you haven't settled)
-        owe_result = await prisma.billshare.group_by(
-            by=["user_id"],
-            sum={"amount": True},
-            where={
-                "bill": {"group_id": group_id, "paid_by": {"not": user_id}, "deleted_at": None},
-                "user_id": user_id,
-                "paid": False,
-            },
-        )
-        total_owe = sum(item["_sum"]["amount"] or 0 for item in owe_result)
-
-        return {
-            "balance": total_owed - total_owe,
-            "total_owed": total_owed,
-            "total_owe": total_owe
-        }
-
-    async def _calculate_total_spent(self, group_id: str) -> float:
-        result = await prisma.bill.group_by(
-            by=["group_id"],
-            sum={"total_amount": True},
-            where={"group_id": group_id, "deleted_at": None},
-        )
-        if not result:
-            return 0.0
-        return result[0]["_sum"]["total_amount"] or 0.0
-
-    async def add_member_to_group(self, group_id: str, data: AddMemberRequest, added_by_id: str):
-        # Verify the adder is an admin of the group
+    # -------------------------
+    # MEMBERSHIP MANAGEMENT
+    # -------------------------
+    async def add_member_to_group(
+        self,
+        group_id: str,
+        data: AddMemberRequest,
+        added_by_id: str,
+    ):
         await self.check_is_admin(added_by_id, group_id)
 
-        # Find user by email
-        user_to_add = await prisma.user.find_unique(where={"email": data.email})
-
-        if not user_to_add:
+        user = await prisma.user.find_unique(where={"email": data.email})
+        if not user:
             raise NotFoundError("User not found")
 
-        # Check if already a member (including soft-deleted)
-        # using find_first to ensure we find it regardless of composite key quirks
-        existing_member = await prisma.groupmember.find_first(
-            where={
-                "user_id": user_to_add.id,
-                "group_id": group_id
-            }
+        existing = await prisma.groupmember.find_first(
+            where={"user_id": user.id, "group_id": group_id}
         )
 
-        if existing_member:
-            if existing_member.deleted_at is None:
-                raise ValidationError("User is already a member of this group")
-            
-            # Restore soft-deleted member
-            member = await prisma.groupmember.update(
-                where={"id": existing_member.id},
+        if existing:
+            if existing.deleted_at is None:
+                raise ValidationError("User is already a member")
+
+            return await prisma.groupmember.update(
+                where={"id": existing.id},
                 data={
                     "deleted_at": None,
                     "deleted_by": None,
                     "role": data.role,
                     "updated_by": added_by_id,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.utcnow(),
                 },
-                include={"user": True}
+                include={"user": True},
             )
-            return member
 
-        # Create new member
-        member = await prisma.groupmember.create(
+        return await prisma.groupmember.create(
             data={
-                "user_id": user_to_add.id,
+                "user_id": user.id,
                 "group_id": group_id,
                 "role": data.role,
                 "created_by": added_by_id,
             },
-            include={"user": True}
+            include={"user": True},
         )
 
-        return member
-
-    async def remove_member_from_group(self, group_id: str, member_id: str, removed_by_id: str):
-        # Verify the remover is an admin
+    async def remove_member_from_group(
+        self,
+        group_id: str,
+        member_id: str,
+        removed_by_id: str,
+    ):
         await self.check_is_admin(removed_by_id, group_id)
 
-        # Soft delete the membership
-        membership = await prisma.groupmember.update(
+        return await prisma.groupmember.update(
             where={"id": member_id},
-            data={"deleted_at": datetime.utcnow(), "deleted_by": removed_by_id},
+            data={
+                "deleted_at": datetime.utcnow(),
+                "deleted_by": removed_by_id,
+            },
         )
-
-        return membership
