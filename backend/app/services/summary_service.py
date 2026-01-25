@@ -1,100 +1,96 @@
+# app/services/summary_service.py
+
+from typing import Optional
+
+# from app.core.exceptions import ForbiddenError
 from app.db import prisma
-from app.models.users import UserOut
+
+# from app.models.users import UserOut
+from app.services.group_service import GroupService
+
 
 class SummaryService:
-    async def get_user_summary(self, user_id: str):
-        # 1. Total Groups
-        group_count = await prisma.groupmember.count(
-            where={"user_id": user_id, "deleted_at": None}
-        )
+    def __init__(self, group_service: GroupService):
+        self.group_service = group_service
 
-        # 2. Total Owed (Others owe you) - Sum of unpaid shares where you are the payer and user is not you
+    async def get_user_summary(self, user_id: str, group_id: Optional[str] = None):
+        """
+        Returns summary metrics for a user.
+        If group_id is provided, returns summary limited to that group.
+        """
+        # If group_id is provided, validate membership
+        if group_id:
+            await self.group_service.check_is_member(user_id, group_id)
+
+        # 1. Total Groups (only count this group if group_id provided)
+        if group_id:
+            group_count = 1
+        else:
+            group_count = await prisma.groupmember.count(
+                where={"user_id": user_id, "deleted_at": None}
+            )
+
+        # 2. Total Owed (others owe you)
+        owed_filter = {
+            "bill": {
+                "deleted_at": None,
+                "paid_by": user_id,
+            },
+            "user_id": {"not": user_id},
+            "paid": False,
+        }
+
+        if group_id:
+            owed_filter["bill"]["group_id"] = group_id
+
         owed_result = await prisma.billshare.group_by(
-            by=["user_id"],
-            sum={"amount": True},
-            where={
-                "bill": {
-                    "paid_by": user_id,
-                    "deleted_at": None
-                },
-                "user_id": {"not": user_id},
-                "paid": False
-            }
+            by=["user_id"], sum={"amount": True}, where=owed_filter
         )
         total_owed = sum(item["_sum"]["amount"] or 0 for item in owed_result)
 
-        # 3. Total Owe (You owe others) - Sum of unpaid shares where you are not the payer and user is you
+        # 3. Total Owe (you owe others)
+        owe_filter = {
+            "bill": {
+                "deleted_at": None,
+                "paid_by": {"not": user_id},
+            },
+            "user_id": user_id,
+            "paid": False,
+        }
+
+        if group_id:
+            owe_filter["bill"]["group_id"] = group_id
+
         owe_result = await prisma.billshare.group_by(
-            by=["user_id"],
-            sum={"amount": True},
-            where={
-                "bill": {
-                    "paid_by": {"not": user_id},
-                    "deleted_at": None
-                },
-                "user_id": user_id,
-                "paid": False
-            }
+            by=["user_id"], sum={"amount": True}, where=owe_filter
         )
         total_owe = sum(item["_sum"]["amount"] or 0 for item in owe_result)
 
-        # 4. Recent Activity (Last 5 bills)
-        recent_bills = await prisma.bill.find_many(
-            where={
-                "OR": [
-                    {"paid_by": user_id},
-                    {"shares": {"some": {"user_id": user_id}}}
-                ],
-                "deleted_at": None
-            },
-            include={
-                "payer": True,
-                "group": True
-            },
-            order={"created_at": "desc"},
-            take=5
-        )
-
-        # 5. Friends (People you share groups with)
-        # This is a bit complex in Prisma without raw queries if we want unique friends.
-        # Let's just get the last 5 unique people you've been in groups with.
-        group_members = await prisma.groupmember.find_many(
-            where={
-                "group": {
-                    "members": {
-                        "some": {"user_id": user_id}
-                    }
-                },
-                "user_id": {"not": user_id},
-                "deleted_at": None
-            },
-            include={"user": True},
-            take=10
-        )
-        
+        # 4. Friends (people you share groups with) - only for global summary
         friends_map = {}
-        for gm in group_members:
-            if gm.user_id not in friends_map:
-                friends_map[gm.user_id] = {
-                    "id": gm.user_id,
-                    "name": gm.user.name,
-                    "email": gm.user.email
-                }
-        
+
+        if not group_id:
+            group_members = await prisma.groupmember.find_many(
+                where={
+                    "group": {"members": {"some": {"user_id": user_id}}},
+                    "user_id": {"not": user_id},
+                    "deleted_at": None,
+                },
+                include={"user": True},
+                take=10,
+            )
+
+            for gm in group_members:
+                if gm.user_id not in friends_map:
+                    friends_map[gm.user_id] = {
+                        "id": gm.user_id,
+                        "name": gm.user.name,
+                        "email": gm.user.email,
+                    }
+
         return {
             "total_owed": total_owed,
             "total_owe": total_owe,
             "group_count": group_count,
-            "recent_activity": [
-                {
-                    "id": b.id,
-                    "description": b.description,
-                    "amount": b.total_amount,
-                    "date": b.created_at,
-                    "payer_name": b.payer.name,
-                    "group_name": b.group.name,
-                    "type": "lent" if b.paid_by == user_id else "borrowed"
-                } for b in recent_bills
-            ],
-            "friends": list(friends_map.values())[:5]
+            "friends": list(friends_map.values())[:5],
         }

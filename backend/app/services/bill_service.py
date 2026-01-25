@@ -54,31 +54,33 @@ class BillService:
             count = len(data.shares)
             if count == 0:
                 raise ValidationError("At least one person must be involved in the split")
-            
+
             individual_amount = data.total_amount / count
             return [
                 {
-                    "user_id": str(share.user_id), 
-                    "amount": individual_amount, 
-                    "paid": str(share.user_id) == paid_by
+                    "user_id": str(share.user_id),
+                    "amount": individual_amount,
+                    "paid": str(share.user_id) == paid_by,
                 }
                 for share in data.shares
             ]
-            
+
         elif data.split_type == SplitType.EXACT:
             total_shares = sum(share.amount or 0 for share in data.shares)
             if abs(total_shares - data.total_amount) > 0.01:
-                raise ValidationError(f"Sum of shares ({total_shares}) must equal total amount ({data.total_amount})")
-            
+                raise ValidationError(
+                    f"Sum of shares ({total_shares}) must equal total amount ({data.total_amount})"
+                )
+
             return [
                 {
-                    "user_id": str(share.user_id), 
-                    "amount": share.amount, 
-                    "paid": str(share.user_id) == paid_by
+                    "user_id": str(share.user_id),
+                    "amount": share.amount,
+                    "paid": str(share.user_id) == paid_by,
                 }
                 for share in data.shares
             ]
-        
+
         raise ValidationError(f"Split type {data.split_type} is not yet implemented")
 
     async def get_group_bills(
@@ -118,7 +120,7 @@ class BillService:
             "has_more": skip + len(bills) < total,
         }
 
-    async def get_user_activity(self, user_id: str, skip: int = 0, limit: int = 20):
+    async def get_user_bills(self, user_id: str, skip: int = 0, limit: int = 20):
         """
         Retrieve all bills where the user is involved (payer or debtor).
         """
@@ -179,9 +181,7 @@ class BillService:
         Only the user who owes the share can mark it as paid.
         """
         # Get the share
-        share = await prisma.billshare.find_unique(
-            where={"id": share_id}, include={"bill": True}
-        )
+        share = await prisma.billshare.find_unique(where={"id": share_id}, include={"bill": True})
 
         if not share:
             raise NotFoundError("Share not found")
@@ -212,9 +212,7 @@ class BillService:
         Only the user who owes the share can mark it as unpaid.
         """
         # Get the share
-        share = await prisma.billshare.find_unique(
-            where={"id": share_id}, include={"bill": True}
-        )
+        share = await prisma.billshare.find_unique(where={"id": share_id}, include={"bill": True})
 
         if not share:
             raise NotFoundError("Share not found")
