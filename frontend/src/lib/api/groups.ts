@@ -41,17 +41,22 @@ export const GroupsAPI = {
     return api.post<Group>("/groups/", data);
   },
 
-  list(search?: string, skip = 0, limit = 20) {
+  list(search?: string, filter?: string, sort_by?: string, order?: string, skip = 0, limit = 20) {
     const params = new URLSearchParams();
     if (search) params.append("search", search);
+    if (filter) params.append("filter", filter);
+    if (sort_by) params.append("sort_by", sort_by);
+    if (order) params.append("order", order);
     params.append("skip", skip.toString());
     params.append("limit", limit.toString());
+
 
     const queryString = params.toString();
     return api.get<PaginatedResponse<Group>>(
       `/groups/${queryString ? `?${queryString}` : ""}`
     );
   },
+
 
   getDetail(id: string) {
     return api.get<GroupDetail>(`/groups/${id}`);

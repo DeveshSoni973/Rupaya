@@ -9,21 +9,25 @@ import {
   ChevronRight,
   UserPlus,
   X,
+  Filter,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  Clock,
+  ArrowUp,
+  ArrowDown,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { cn } from "@/lib/utils"; // Assuming cn utility is available here
+import { cn } from "@/lib/utils";
 
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 
 import { GroupsAPI, UsersAPI, SummaryAPI } from "@/lib/api";
 
-interface GroupMember {
-  id: string;
-  name: string;
-  email: string;
-}
+type SortOption = "newest" | "oldest" | "name_asc" | "name_desc" | "owed" | "owe";
 
 interface Group {
   id: string;
@@ -31,7 +35,11 @@ interface Group {
   owner_id?: string;
   member_count?: number;
   balance?: number;
+  total_owed: number;
+  total_owe: number;
+  created_at: string;
 }
+
 
 export default function GroupsPage() {
   const [groupStep, setGroupStep] = React.useState<"info" | "members">("info");
@@ -53,62 +61,62 @@ export default function GroupsPage() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
 
-  React.useEffect(() => {
-    fetchGroups();
-  }, []);
+  const [sortBy, setSortBy] = React.useState<SortOption>("newest");
+  const [filter, setFilter] = React.useState<"all" | "owe" | "owed">("all");
+  const [isSortModalOpen, setIsSortModalOpen] = React.useState(false);
 
-  // Search logic
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      if (memberEmail.length > 1) {
-        handleSearch(memberEmail);
-      } else {
-        setSearchResults([]);
+  const fetchGroups = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // Map frontend sortBy to backend sort_by and order
+      let backendSort = "created_at";
+      let backendOrder = "desc";
+
+      if (sortBy === "oldest") {
+        backendOrder = "asc";
+      } else if (sortBy === "name_asc") {
+        backendSort = "name";
+        backendOrder = "asc";
+      } else if (sortBy === "name_desc") {
+        backendSort = "name";
+        backendOrder = "desc";
+      } else if (sortBy === "owed") {
+        backendSort = "owed";
+        backendOrder = "desc";
+      } else if (sortBy === "owe") {
+        backendSort = "owe";
+        backendOrder = "desc";
       }
-    }, 300);
 
-    return () => clearTimeout(timer);
-  }, [memberEmail]);
+      // Add filter param
+      const backendFilter = filter === "all" ? undefined : filter;
 
-  const handleSearch = async (query: string) => {
-    setIsSearching(true);
-    try {
-      const results = await UsersAPI.search(query);
-      setSearchResults(results);
-    } catch (error) {
-      console.error("Search failed:", error);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  const fetchGroups = async () => {
-    try {
-      const data = await GroupsAPI.list();
-
-      // Fetch balance for each group
-      const groupsWithBalances = await Promise.all(
-        data.items.map(async (group) => {
-          try {
-            const summary = await SummaryAPI.getDashboard(group.id);
-            return {
-              ...group,
-              balance: summary.total_owed - summary.total_owe,
-            };
-          } catch (error) {
-            console.error(`Failed to fetch balance for group ${group.id}:`, error);
-            return { ...group, balance: 0 };
-          }
-        })
+      const data = await GroupsAPI.list(
+        groupSearch,
+        backendFilter,
+        backendSort,
+        backendOrder
       );
 
-      setGroups(groupsWithBalances);
+      const mappedGroups = (data.items as any[]).map(g => ({
+        ...g,
+        balance: (g.total_owed || 0) - (g.total_owe || 0)
+      })) as Group[];
+
+
+      setGroups(mappedGroups);
     } catch (error) {
       console.error("Failed to fetch groups:", error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [groupSearch, sortBy, filter]);
+
+
+  React.useEffect(() => {
+    fetchGroups();
+  }, [fetchGroups]);
+
 
   const resetModal = () => {
     setIsModalOpen(false);
@@ -137,6 +145,31 @@ export default function GroupsPage() {
     }
   };
 
+  // Search logic for members
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (memberEmail.length > 1) {
+        handleSearch(memberEmail);
+      } else {
+        setSearchResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [memberEmail]);
+
+  const handleSearch = async (query: string) => {
+    setIsSearching(true);
+    try {
+      const results = await UsersAPI.search(query);
+      setSearchResults(results);
+    } catch (error) {
+      console.error("Search failed:", error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   const addMemberAction = (user: SearchUser) => {
     if (!addedMembers.find((m) => m.id === user.id)) {
       setAddedMembers([...addedMembers, user]);
@@ -144,6 +177,7 @@ export default function GroupsPage() {
       setSearchResults([]);
     }
   };
+
 
   return (
     <div className="space-y-8">
@@ -175,6 +209,50 @@ export default function GroupsPage() {
         </div>
       </div>
 
+      {/* Sorting & Filters */}
+      <div className="flex flex-wrap items-center justify-between gap-4 py-2 border-y border-border/40">
+        <div className="flex items-center gap-1.5 p-1 bg-secondary/30 rounded-full">
+          {[
+            { id: "all", label: "ALL" },
+            { id: "owe", label: "OWE" },
+            { id: "owed", label: "OWED" },
+          ].map((tab) => (
+            <Button
+              key={tab.id}
+              variant={filter === tab.id ? "primary" : "ghost"}
+              size="sm"
+              onClick={() => setFilter(tab.id as any)}
+              className={cn(
+                "rounded-full px-5 h-8 text-[10px] font-black uppercase tracking-wider transition-all",
+                filter === tab.id
+                  ? "shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/50 dark:hover:bg-white/5"
+              )}
+            >
+              {tab.label}
+            </Button>
+          ))}
+        </div>
+
+
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsSortModalOpen(true)}
+          className="rounded-full px-4 h-9 text-xs font-bold text-muted-foreground hover:text-primary"
+        >
+          <Filter className="w-3.5 h-3.5 mr-2" />
+          {sortBy === "newest" ? "Newest First" :
+            sortBy === "oldest" ? "Oldest First" :
+              sortBy === "name_asc" ? "Name (A-Z)" :
+                sortBy === "name_desc" ? "Name (Z-A)" :
+                  sortBy === "owe" ? "Most Owe" :
+                    sortBy === "owed" ? "Most Owed" : "Sorted"}
+
+        </Button>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? (
           // Loading skeletons
@@ -184,70 +262,70 @@ export default function GroupsPage() {
               className="h-64 bg-card/50 border border-border animate-pulse rounded-2xl"
             />
           ))
-        ) : groups.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase())).length > 0 ? (
-          groups
-            .filter((g) => g.name.toLowerCase().includes(groupSearch.toLowerCase()))
-            .map((group, i) => (
-              <motion.div
-                key={group.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="group relative bg-card border border-border rounded-2xl p-6 hover:border-primary/50 hover:shadow-xl transition-all duration-300"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
-                    <Users className="w-6 h-6" />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full h-8 w-8"
+        ) : groups.length > 0 ? (
+          groups.map((group: Group, i: number) => (
+
+
+            <motion.div
+              key={group.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              className="group relative bg-card border border-border rounded-2xl p-6 hover:border-primary/50 hover:shadow-xl transition-all duration-300"
+            >
+              <div className="flex justify-between items-start mb-4">
+                <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+                  <Users className="w-6 h-6" />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full h-8 w-8"
+                >
+                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold tracking-tight">
+                  {group.name}
+                </h3>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>{group.member_count || 0} members</span>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-border flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                    Balance
+                  </p>
+                  <p
+                    className={cn(
+                      "text-lg font-bold",
+                      (group.balance || 0) > 0
+                        ? "text-emerald-500"
+                        : (group.balance || 0) < 0
+                          ? "text-rose-500"
+                          : "text-muted-foreground",
+                    )}
                   >
-                    <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                    {(group.balance || 0) > 0 ? "+" : ""}₹
+                    {Math.abs(group.balance || 0).toLocaleString()}
+                  </p>
+                </div>
+                <Link href={`/groups/${group.id}`}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="rounded-lg group-hover:bg-primary group-hover:text-white transition-colors"
+                  >
+                    View <ChevronRight className="ml-1 w-4 h-4" />
                   </Button>
-                </div>
-
-                <div className="space-y-1">
-                  <h3 className="text-xl font-bold tracking-tight">
-                    {group.name}
-                  </h3>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>{group.member_count || 0} members</span>
-                  </div>
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-border flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
-                      Balance
-                    </p>
-                    <p
-                      className={cn(
-                        "text-lg font-bold",
-                        (group.balance || 0) > 0
-                          ? "text-emerald-500"
-                          : (group.balance || 0) < 0
-                            ? "text-rose-500"
-                            : "text-muted-foreground",
-                      )}
-                    >
-                      {(group.balance || 0) > 0 ? "+" : ""}₹
-                      {Math.abs(group.balance || 0).toLocaleString()}
-                    </p>
-                  </div>
-                  <Link href={`/groups/${group.id}`}>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="rounded-lg group-hover:bg-primary group-hover:text-white transition-colors"
-                    >
-                      View <ChevronRight className="ml-1 w-4 h-4" />
-                    </Button>
-                  </Link>
-                </div>
-              </motion.div>
-            ))
+                </Link>
+              </div>
+            </motion.div>
+          ))
         ) : groupSearch ? (
           /* No Search Results */
           <motion.div
@@ -451,6 +529,48 @@ export default function GroupsPage() {
           )}
         </div>
       </Modal>
+
+      {/* Sort Modal */}
+      <Modal
+        isOpen={isSortModalOpen}
+        onClose={() => setIsSortModalOpen(false)}
+        title="Sort Groups"
+        description="Choose how you want to organize your groups."
+      >
+        <div className="grid grid-cols-1 gap-2 pt-4">
+          {[
+            { id: "newest", label: "Newest First", icon: Clock },
+            { id: "oldest", label: "Oldest First", icon: Clock },
+            { id: "name_asc", label: "Name (A-Z)", icon: ArrowDownAZ },
+            { id: "name_desc", label: "Name (Z-A)", icon: ArrowUpAZ },
+            { id: "owed", label: "How much they owe you", icon: TrendingUp },
+            { id: "owe", label: "How much you owe them", icon: TrendingDown },
+          ].map((option) => (
+            <button
+              key={option.id}
+              onClick={() => {
+                setSortBy(option.id as SortOption);
+                setIsSortModalOpen(false);
+              }}
+              className={cn(
+                "w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left",
+                sortBy === option.id
+                  ? "bg-primary/5 border-primary text-primary font-bold"
+                  : "bg-secondary/20 border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <option.icon className="w-5 h-5" />
+                <span>{option.label}</span>
+              </div>
+              {sortBy === option.id && (
+                <div className="w-2 h-2 bg-primary rounded-full" />
+              )}
+            </button>
+          ))}
+        </div>
+      </Modal>
     </div>
+
   );
 }

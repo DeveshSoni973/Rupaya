@@ -23,6 +23,9 @@ class GroupOut(BaseModel):
     created_by: str | None
     created_at: datetime
     member_count: int = 0
+    total_owed: float = 0
+    total_owe: float = 0
+
 
     class Config:
         from_attributes = True

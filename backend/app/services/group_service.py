@@ -79,9 +79,15 @@ class GroupService:
     # READ OPERATIONS
     # -------------------------
     async def get_user_groups(
-        self, user_id: str, search: str | None = None, skip: int = 0, limit: int = 20
+        self, user_id: str, search: str | None = None, 
+        filter: str | None = None,
+        sort_by: str = "created_at", order: str = "desc",
+        skip: int = 0, limit: int = 20
     ):
-        # Get all groups where user is a member
+        # ... logic ...
+        # (Rest of the logic from previous step, adding filter check at the end of metrics loop)
+        
+        # 1. Get all memberships for the user
         where_filter = {
             "user_id": user_id,
             "deleted_at": None,
@@ -95,51 +101,90 @@ class GroupService:
                     "OR": [
                         {"name": {"contains": search, "mode": "insensitive"}},
                         {"description": {"contains": search, "mode": "insensitive"}},
-                        {
-                            "members": {
-                                "some": {
-                                    "user": {"email": {"contains": search, "mode": "insensitive"}},
-                                    "deleted_at": None,
-                                }
-                            }
-                        },
                     ],
                 }
             }
-
-        total = await prisma.groupmember.count(where=where_filter)
 
         memberships = await prisma.groupmember.find_many(
             where=where_filter,
             include={
                 "group": {
                     "include": {
-                        "members": {
-                            "include": {"user": True},
-                            "where": {"deleted_at": None},
-                        }
+                        "members": {"where": {"deleted_at": None}},
                     }
                 }
             },
-            skip=skip,
-            take=limit,
-            order={"created_at": "desc"},
         )
 
-        groups = []
+        # 2. Process each group to add metrics
+        groups_list = []
         for m in memberships:
-            if m.group:
-                g_dict = m.group.model_dump()
-                g_dict["member_count"] = len(m.group.members)
-                groups.append(g_dict)
+            if not m.group:
+                continue
+            
+            group_id = m.group.id
+            
+            # Sub-query for Owed (others owe user in this group)
+            owed_result = await prisma.billshare.group_by(
+                by=["bill_id"],
+                sum={"amount": True},
+                where={
+                    "bill": {"group_id": group_id, "paid_by": user_id, "deleted_at": None},
+                    "user_id": {"not": user_id},
+                    "paid": False
+                }
+            )
+            total_owed = sum(item["_sum"]["amount"] or 0 for item in owed_result)
+
+            # Sub-query for Owe (user owes others in this group)
+            owe_result = await prisma.billshare.group_by(
+                by=["bill_id"],
+                sum={"amount": True},
+                where={
+                    "bill": {"group_id": group_id, "paid_by": {"not": user_id}, "deleted_at": None},
+                    "user_id": user_id,
+                    "paid": False
+                }
+            )
+            total_owe = sum(item["_sum"]["amount"] or 0 for item in owe_result)
+
+            # --- FILTERING LOGIC ---
+            if filter == "owe" and total_owe <= 0:
+                continue
+            if filter == "owed" and total_owed <= 0:
+                continue
+
+            g_dict = m.group.model_dump()
+            g_dict["member_count"] = len(m.group.members)
+            g_dict["total_owed"] = total_owed
+            g_dict["total_owe"] = total_owe
+            groups_list.append(g_dict)
+
+        # 3. Handle Sorting
+        reverse = (order.lower() == "desc")
+        
+        if sort_by == "name":
+            groups_list.sort(key=lambda x: x["name"].lower(), reverse=reverse)
+        elif sort_by == "owed":
+            groups_list.sort(key=lambda x: x["total_owed"], reverse=reverse)
+        elif sort_by == "owe":
+            groups_list.sort(key=lambda x: x["total_owe"], reverse=reverse)
+        else: # default: created_at
+            groups_list.sort(key=lambda x: x["created_at"], reverse=reverse)
+
+        # 4. Handle Pagination
+        total = len(groups_list)
+        paginated_items = groups_list[skip : skip + limit]
 
         return {
-            "items": groups,
+            "items": paginated_items,
             "total": total,
             "skip": skip,
             "limit": limit,
             "has_more": (skip + limit) < total,
         }
+
+
 
     async def get_group_detail(self, group_id: str, user_id: str):
         await self.check_is_member(user_id, group_id)

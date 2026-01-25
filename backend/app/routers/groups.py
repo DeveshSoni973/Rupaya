@@ -35,20 +35,29 @@ async def create_group(
 @router.get("/", response_model=PaginatedResponse[GroupOut])
 async def get_user_groups(
     search: str | None = None,
+    filter: str | None = None,
+    sort_by: str = "created_at",
+    order: str = "desc",
     skip: int = 0,
     limit: int = 20,
     current_user: UserOut = Depends(get_current_user),
     service: GroupService = Depends(get_group_service),
 ):
+
     """
-    Get all groups for the current user with search and pagination metadata.
+    Get all groups for the current user with search, filter, sort, and pagination.
     """
     return await service.get_user_groups(
         user_id=current_user.id,
         search=search,
+        filter=filter,
+        sort_by=sort_by,
+        order=order,
         skip=skip,
         limit=limit,
     )
+
+
 
 
 @router.get("/{group_id}", response_model=GroupDetailOut)
