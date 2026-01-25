@@ -158,11 +158,15 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button className="rounded-xl shadow-lg shadow-primary/20">
+            <Button
+              className="rounded-xl shadow-lg shadow-primary/20"
+              onClick={() => window.dispatchEvent(new Event("open-add-expense"))}
+            >
               <Plus className="mr-2 h-4 w-4" />
               New Expense
             </Button>
           </div>
+
         </div>
 
         {/* Stats Grid */}

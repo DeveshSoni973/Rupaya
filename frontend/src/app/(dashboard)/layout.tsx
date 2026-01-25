@@ -40,12 +40,20 @@ export default function DashboardLayout({
     fetchUser();
   }, [router]);
 
-  // Handle sidebar toggle via custom event for simplicity in this structure
+  // Handle sidebar toggle and open expense modal via custom events
   React.useEffect(() => {
     const handleToggle = (e: Event) => setIsSidebarCollapsed((e as CustomEvent).detail);
+    const handleOpenExpense = () => setIsAddExpenseOpen(true);
+
     window.addEventListener('sidebar-toggle', handleToggle);
-    return () => window.removeEventListener('sidebar-toggle', handleToggle);
+    window.addEventListener('open-add-expense', handleOpenExpense);
+
+    return () => {
+      window.removeEventListener('sidebar-toggle', handleToggle);
+      window.removeEventListener('open-add-expense', handleOpenExpense);
+    };
   }, []);
+
 
   if (isCheckingAuth) {
     return (
