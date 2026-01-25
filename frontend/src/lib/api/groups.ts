@@ -20,11 +20,8 @@ export interface GroupMember {
 export interface GroupDetail {
   id: string;
   name: string;
+  description?: string;
   members: GroupMember[];
-  user_balance: number;
-  total_spent: number;
-  total_owed: number;
-  total_owe: number;
 }
 
 export interface GroupCreate {

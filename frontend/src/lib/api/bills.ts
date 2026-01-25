@@ -50,12 +50,12 @@ export const BillsAPI = {
     return api.get<PaginatedResponse<Bill>>(`/bills/group/${groupId}?${params.toString()}`);
   },
 
-  getActivity(skip = 0, limit = 20) {
+  getUserBills(skip = 0, limit = 20) {
     const params = new URLSearchParams({
       skip: skip.toString(),
       limit: limit.toString(),
     });
-    return api.get<PaginatedResponse<Bill>>(`/bills/activity?${params.toString()}`);
+    return api.get<PaginatedResponse<Bill>>(`/bills/?${params.toString()}`);
   },
 
   getDetail(id: string) {

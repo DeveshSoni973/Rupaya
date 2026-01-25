@@ -99,7 +99,7 @@ export function ExpenseList({
                 </div>
               </div>
               <div className="flex items-center gap-6">
-                {myShare && (
+                {(isPayer || myShare) && (
                   <div className="text-right hidden sm:block">
                     <p
                       className={cn(
@@ -109,27 +109,46 @@ export function ExpenseList({
                     >
                       {isPayer ? (
                         <span className="flex items-center gap-1">
-                          {bill.total_amount - myShare.amount > 0 ? (
+                          {myShare ? (
+                            // Payer has a share
+                            bill.total_amount - myShare.amount > 0 ? (
+                              <>
+                                <ArrowUpRight className="w-3 h-3" />
+                                You lent ₹{(bill.total_amount - myShare.amount).toLocaleString()}
+                              </>
+                            ) : (
+                              <>
+                                <Receipt className="w-3 h-3 text-muted-foreground/50" />
+                                You spent ₹{myShare.amount.toLocaleString()}
+                              </>
+                            )
+                          ) : (
+                            // Payer has no share - lent full amount
                             <>
                               <ArrowUpRight className="w-3 h-3" />
-                              You lent ₹{(bill.total_amount - myShare.amount).toLocaleString()}
-                            </>
-                          ) : (
-                            <>
-                              <Receipt className="w-3 h-3 text-muted-foreground/50" />
-                              You spent ₹{myShare.amount.toLocaleString()}
+                              You lent ₹{bill.total_amount.toLocaleString()}
                             </>
                           )}
                         </span>
                       ) : (
                         <span className="flex items-center gap-1">
                           <ArrowDownLeft className="w-3 h-3" />
-                          You owe ₹{myShare.amount.toLocaleString()}
+                          You owe ₹{myShare!.amount.toLocaleString()}
                         </span>
                       )}
                     </p>
                     <p className="text-[10px] text-muted-foreground uppercase font-medium">
-                      {myShare.paid ? "Settled" : "Pending"}
+                      {isPayer ? (
+                        myShare ? (
+                          // Check if all OTHER shares are paid
+                          bill.shares.filter(s => s.user_id !== currentUserId).every(s => s.paid) ? "Settled" : "Pending"
+                        ) : (
+                          // Check if all shares are paid
+                          bill.shares.every(s => s.paid) ? "Settled" : "Pending"
+                        )
+                      ) : (
+                        myShare!.paid ? "Settled" : "Pending"
+                      )}
                     </p>
                   </div>
                 )}

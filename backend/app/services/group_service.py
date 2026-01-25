@@ -126,7 +126,7 @@ class GroupService:
             order={"created_at": "desc"},
         )
 
-        groups = [m.group.model_dump() for m in memberships if m.group]
+        groups = [m.group for m in memberships if m.group]
 
         return {
             "items": groups,

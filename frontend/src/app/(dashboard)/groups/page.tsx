@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils"; // Assuming cn utility is available here
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 
-import { GroupsAPI, UsersAPI } from "@/lib/api";
+import { GroupsAPI, UsersAPI, SummaryAPI } from "@/lib/api";
 
 interface GroupMember {
   id: string;
@@ -30,7 +30,7 @@ interface Group {
   name: string;
   owner_id?: string;
   members?: GroupMember[];
-  user_balance?: number;
+  balance?: number;
 }
 
 export default function GroupsPage() {
@@ -85,7 +85,24 @@ export default function GroupsPage() {
   const fetchGroups = async () => {
     try {
       const data = await GroupsAPI.list();
-      setGroups(data.items);
+
+      // Fetch balance for each group
+      const groupsWithBalances = await Promise.all(
+        data.items.map(async (group) => {
+          try {
+            const summary = await SummaryAPI.getDashboard(group.id);
+            return {
+              ...group,
+              balance: summary.total_owed - summary.total_owe,
+            };
+          } catch (error) {
+            console.error(`Failed to fetch balance for group ${group.id}:`, error);
+            return { ...group, balance: 0 };
+          }
+        })
+      );
+
+      setGroups(groupsWithBalances);
     } catch (error) {
       console.error("Failed to fetch groups:", error);
     } finally {
@@ -208,15 +225,15 @@ export default function GroupsPage() {
                     <p
                       className={cn(
                         "text-lg font-bold",
-                        (group.user_balance || 0) > 0
+                        (group.balance || 0) > 0
                           ? "text-emerald-500"
-                          : (group.user_balance || 0) < 0
+                          : (group.balance || 0) < 0
                             ? "text-rose-500"
                             : "text-muted-foreground",
                       )}
                     >
-                      {(group.user_balance || 0) > 0 ? "+" : ""}₹
-                      {((group.user_balance || 0)).toLocaleString()}
+                      {(group.balance || 0) > 0 ? "+" : ""}₹
+                      {Math.abs(group.balance || 0).toLocaleString()}
                     </p>
                   </div>
                   <Link href={`/groups/${group.id}`}>

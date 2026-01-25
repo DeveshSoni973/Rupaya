@@ -20,12 +20,12 @@ export interface SummaryData {
   total_owed: number;
   total_owe: number;
   group_count: number;
-  recent_activity: RecentActivity[];
   friends: Friend[];
 }
 
 export const SummaryAPI = {
-  getDashboard() {
-    return api.get<SummaryData>("/summary/");
+  getDashboard(groupId?: string) {
+    const params = groupId ? `?group_id=${groupId}` : "";
+    return api.get<SummaryData>(`/summary/${params}`);
   },
 };

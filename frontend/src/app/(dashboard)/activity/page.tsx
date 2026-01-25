@@ -30,7 +30,7 @@ export default function ActivityPage() {
 
     const fetchData = useCallback(
         async (skip: number, limit: number) => {
-            return await BillsAPI.getActivity(skip, limit);
+            return await BillsAPI.getUserBills(skip, limit);
         },
         []
     );
@@ -76,6 +76,9 @@ export default function ActivityPage() {
                     );
                     const isPayer = item.paid_by === currentUser?.id;
 
+                    // Don't show bills where user has no relationship
+                    if (!isPayer && !myShare) return null;
+
                     return (
                         <div
                             key={item.id}
@@ -105,38 +108,59 @@ export default function ActivityPage() {
                             </div>
 
                             <div className="flex items-center justify-between sm:justify-end gap-10 border-t sm:border-t-0 pt-4 sm:pt-0 border-border/50">
-                                {myShare && (
-                                    <div className="text-right">
-                                        <div className={cn(
-                                            "text-sm font-black flex items-center gap-1 justify-end",
-                                            isPayer ? "text-emerald-500" : "text-rose-500"
-                                        )}>
-                                            {isPayer ? (
+                                <div className="text-right">
+                                    {isPayer ? (
+                                        // User is the payer
+                                        myShare ? (
+                                            // Payer has a share
+                                            item.total_amount - myShare.amount > 0 ? (
                                                 <>
-                                                    {item.total_amount - myShare.amount > 0 ? (
-                                                        <>
-                                                            <ArrowUpRight className="w-4 h-4" />
-                                                            Lent ₹{(item.total_amount - myShare.amount).toLocaleString()}
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Receipt className="w-4 h-4 text-muted-foreground/40" />
-                                                            Spent ₹{myShare.amount.toLocaleString()}
-                                                        </>
-                                                    )}
+                                                    <div className="text-sm font-black flex items-center gap-1 justify-end text-emerald-500">
+                                                        <ArrowUpRight className="w-4 h-4" />
+                                                        Lent ₹{(item.total_amount - myShare.amount).toLocaleString()}
+                                                    </div>
+                                                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mt-0.5">
+                                                        {/* Check if all OTHER shares are paid */}
+                                                        {item.shares.filter(s => s.user_id !== currentUser?.id).every(s => s.paid) ? "Settled" : "Pending"}
+                                                    </p>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <ArrowDownLeft className="w-4 h-4" />
-                                                    Owe ₹{myShare.amount.toLocaleString()}
+                                                    <div className="text-sm font-black flex items-center gap-1 justify-end text-muted-foreground">
+                                                        <Receipt className="w-4 h-4 text-muted-foreground/40" />
+                                                        Spent ₹{myShare.amount.toLocaleString()}
+                                                    </div>
+                                                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mt-0.5">
+                                                        Settled
+                                                    </p>
                                                 </>
-                                            )}
-                                        </div>
-                                        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mt-0.5">
-                                            {myShare.paid ? "Settled" : (isPayer ? "Pending" : "To Pay")}
-                                        </p>
-                                    </div>
-                                )}
+                                            )
+                                        ) : (
+                                            // Payer has no share - lent full amount
+                                            <>
+                                                <div className="text-sm font-black flex items-center gap-1 justify-end text-emerald-500">
+                                                    <ArrowUpRight className="w-4 h-4" />
+                                                    Lent ₹{item.total_amount.toLocaleString()}
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mt-0.5">
+                                                    {/* Check if all shares are paid */}
+                                                    {item.shares.every(s => s.paid) ? "Settled" : "Pending"}
+                                                </p>
+                                            </>
+                                        )
+                                    ) : myShare ? (
+                                        // User is not payer but has a share
+                                        <>
+                                            <div className="text-sm font-black flex items-center gap-1 justify-end text-rose-500">
+                                                <ArrowDownLeft className="w-4 h-4" />
+                                                Owe ₹{myShare.amount.toLocaleString()}
+                                            </div>
+                                            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mt-0.5">
+                                                {myShare.paid ? "Settled" : "Pending"}
+                                            </p>
+                                        </>
+                                    ) : null}
+                                </div>
                                 <div className="text-right min-w-[100px]">
                                     <p className="text-xl font-black">
                                         ₹{item.total_amount.toLocaleString()}

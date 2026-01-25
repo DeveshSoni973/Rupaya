@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SummaryAPI } from "@/lib/api/summary";
+import { BillsAPI, type Bill } from "@/lib/api";
 import { UsersAPI } from "@/lib/api/users";
 import { useRouter } from "next/navigation";
 import { AnimatePresence } from "framer-motion";
@@ -20,15 +21,6 @@ interface SummaryData {
   total_owed: number;
   total_owe: number;
   group_count: number;
-  recent_activity: {
-    id: string;
-    description: string;
-    amount: number;
-    date: string;
-    payer_name: string;
-    group_name: string;
-    type: "lent" | "borrowed";
-  }[];
   friends: {
     id: string;
     name: string;
@@ -39,7 +31,8 @@ interface SummaryData {
 export default function DashboardPage() {
   const router = useRouter();
   const [data, setData] = React.useState<SummaryData | null>(null);
-  const [user, setUser] = React.useState<{ name: string } | null>(null);
+  const [recentBills, setRecentBills] = React.useState<Bill[]>([]);
+  const [user, setUser] = React.useState<{ name: string; id: string } | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
 
@@ -55,12 +48,14 @@ export default function DashboardPage() {
   React.useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [summary, userData] = await Promise.all([
+        const [summary, userData, billsData] = await Promise.all([
           SummaryAPI.getDashboard(),
           UsersAPI.getCurrentUser(),
+          BillsAPI.getUserBills(0, 5),
         ]);
         setData(summary);
         setUser(userData);
+        setRecentBills(billsData.items);
       } catch (error) {
         console.error("Dashboard fetch failed:", error);
       } finally {
@@ -73,7 +68,7 @@ export default function DashboardPage() {
   React.useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && data?.recent_activity.length && data.recent_activity.length >= 5) {
+        if (entries[0].isIntersecting && recentBills.length && recentBills.length >= 5) {
           handle3DTransition();
         }
       },
@@ -85,7 +80,7 @@ export default function DashboardPage() {
     }
 
     return () => observer.disconnect();
-  }, [handle3DTransition, data?.recent_activity.length]);
+  }, [handle3DTransition, recentBills.length]);
 
   const stats = [
     {
@@ -111,7 +106,7 @@ export default function DashboardPage() {
     },
     {
       label: "Total Expenses",
-      value: `${data?.recent_activity.length || 0} Recent`,
+      value: `${recentBills.length || 0} Recent`,
       icon: Receipt,
       color: "text-purple-500",
       bg: "bg-purple-500/10",
@@ -209,49 +204,77 @@ export default function DashboardPage() {
               </Button>
             </div>
             <div className="bg-card border border-border rounded-2xl overflow-hidden group/activity relative">
-              {data?.recent_activity.length === 0 ? (
+              {recentBills.length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground text-sm">
                   No recent activity
                 </div>
               ) : (
                 <>
-                  {data?.recent_activity.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-4 border-b border-border last:border-0 hover:bg-primary/[0.02] transition-colors cursor-pointer"
-                      onClick={() => (window.location.href = "/activity")}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
-                          <Receipt className="w-5 h-5 text-muted-foreground" />
+                  {recentBills.map((bill) => {
+                    const myShare = bill.shares.find((s) => s.user_id === user?.id);
+                    const isPayer = bill.paid_by === user?.id;
+
+                    // Calculate display amount and type
+                    let displayAmount = 0;
+                    let type: "lent" | "borrowed" = "borrowed";
+
+                    if (isPayer) {
+                      // If you're the payer
+                      if (myShare) {
+                        // You paid and have a share: lent = total - your share
+                        displayAmount = bill.total_amount - myShare.amount;
+                      } else {
+                        // You paid but have no share: lent = total amount
+                        displayAmount = bill.total_amount;
+                      }
+                      type = "lent";
+                    } else if (myShare) {
+                      // You didn't pay but have a share: borrowed = your share
+                      displayAmount = myShare.amount;
+                      type = "borrowed";
+                    }
+
+                    // Don't show bills where you have no relationship
+                    if (!isPayer && !myShare) return null;
+
+                    return (
+                      <div
+                        key={bill.id}
+                        className="flex items-center justify-between p-4 border-b border-border last:border-0 hover:bg-primary/[0.02] transition-colors cursor-pointer"
+                        onClick={() => (window.location.href = "/activity")}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
+                            <Receipt className="w-5 h-5 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-sm">
+                              {bill.description}
+                            </h4>
+                            <p className="text-xs text-muted-foreground">
+                              {bill.group?.name || "Unknown Group"} •{" "}
+                              {new Date(bill.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-semibold text-sm">
-                            {item.description}
-                          </h4>
-                          <p className="text-xs text-muted-foreground">
-                            {item.group_name} •{" "}
-                            {new Date(item.date).toLocaleDateString()}
+                        <div className="text-right">
+                          <p className="font-bold text-sm">
+                            ₹{displayAmount.toLocaleString()}
+                          </p>
+                          <p
+                            className={cn(
+                              "text-[10px] font-medium",
+                              type === "lent"
+                                ? "text-emerald-500"
+                                : "text-rose-500"
+                            )}
+                          >
+                            {type === "lent" ? "You lent" : "You borrowed"}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-sm">
-                          ₹{item.amount.toLocaleString()}
-                        </p>
-                        <p
-                          className={cn(
-                            "text-[10px] font-medium",
-                            item.type === "lent"
-                              ? "text-emerald-500"
-                              : "text-rose-500"
-                          )}
-                        >
-                          {item.type === "lent" ? "You lent" : "You borrowed"}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <div
                     onClick={() => (window.location.href = "/activity")}
                     className="block p-4 bg-secondary/10 hover:bg-secondary/20 text-center transition-colors group/more cursor-pointer"
@@ -263,7 +286,7 @@ export default function DashboardPage() {
                   </div>
                   {/* 3D Scroll Sentinel */}
                   <div ref={scrollSentinelRef} className="h-20 flex items-center justify-center">
-                    {data?.recent_activity.length && data.recent_activity.length >= 5 && (
+                    {recentBills.length && recentBills.length >= 5 && (
                       <div className="flex flex-col items-center gap-2">
                         <div className="w-1 h-8 bg-gradient-to-b from-primary to-transparent animate-bounce rounded-full" />
                         <p className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40">Diving into history</p>

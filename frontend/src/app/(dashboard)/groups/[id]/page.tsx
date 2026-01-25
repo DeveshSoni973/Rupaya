@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { Settings, Trash2, Wallet, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { GroupsAPI, UsersAPI, type GroupMember } from "@/lib/api";
+import { GroupsAPI, UsersAPI, type GroupMember, SummaryAPI } from "@/lib/api";
 
 // Extracted Components
 import { GroupHeader } from "@/components/groups/GroupHeader";
@@ -54,10 +54,11 @@ interface GroupDetail {
   type: string;
   members: Member[];
   bills: Bill[];
-  total_spent: number;
-  user_balance: number;
-  total_owed?: number;
-  total_owe?: number;
+}
+
+interface GroupSummary {
+  total_owed: number;
+  total_owe: number;
 }
 
 export default function GroupDetailPage() {
@@ -65,6 +66,7 @@ export default function GroupDetailPage() {
   const id = params?.id as string;
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
+  const [groupSummary, setGroupSummary] = useState<GroupSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -75,11 +77,12 @@ export default function GroupDetailPage() {
   // Moved fetch functions inside useEffect or wrapped in useCallback to satisfy linter
   const fetchGroupDetail = React.useCallback(async () => {
     try {
-      const data = await GroupsAPI.getDetail(id);
+      const [data, summary] = await Promise.all([
+        GroupsAPI.getDetail(id),
+        SummaryAPI.getDashboard(id),
+      ]);
 
       // Transform API data to match local interface expected by MemberList
-      // Local Member expects { id, role, user: { id, name, email } }
-      // API now returns nested members structure!
       const transformedMembers: Member[] = data.members.map((m: GroupMember) => ({
         id: m.id,
         role: (m.role as "ADMIN" | "MEMBER") || "MEMBER",
@@ -96,14 +99,14 @@ export default function GroupDetailPage() {
         name: data.name,
         type: "SHARED", // Default
         members: transformedMembers,
-        bills: [], // API doesn't return bills in detail view apparently? Or we need separate call
-        total_spent: data.total_spent || 0,
-        user_balance: data.user_balance || 0,
-        total_owed: data.total_owed || 0,
-        total_owe: data.total_owe || 0
+        bills: [], // API doesn't return bills in detail view
       };
 
       setGroup(fullGroup);
+      setGroupSummary({
+        total_owed: summary.total_owed,
+        total_owe: summary.total_owe,
+      });
     } catch (error) {
       console.error("Failed to fetch group:", error);
     } finally {
@@ -178,16 +181,16 @@ export default function GroupDetailPage() {
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Balance</p>
             <div className={cn(
               "p-2 rounded-xl",
-              (group.user_balance || 0) > 0 ? "bg-emerald-500/10 text-emerald-500" : (group.user_balance || 0) < 0 ? "bg-rose-500/10 text-rose-500" : "bg-primary/10 text-primary"
+              ((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)) > 0 ? "bg-emerald-500/10 text-emerald-500" : ((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)) < 0 ? "bg-rose-500/10 text-rose-500" : "bg-primary/10 text-primary"
             )}>
               <Wallet className="w-4 h-4" />
             </div>
           </div>
           <p className={cn(
             "text-3xl font-black",
-            (group.user_balance || 0) > 0 ? "text-emerald-500" : (group.user_balance || 0) < 0 ? "text-rose-500" : "text-foreground"
+            ((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)) > 0 ? "text-emerald-500" : ((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)) < 0 ? "text-rose-500" : "text-foreground"
           )}>
-            {(group.user_balance || 0) > 0 ? "+" : ""}₹{(group.user_balance || 0).toLocaleString()}
+            {((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)) > 0 ? "+" : ""}₹{((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)).toLocaleString()}
           </p>
         </div>
 
@@ -199,7 +202,7 @@ export default function GroupDetailPage() {
             </div>
           </div>
           <p className="text-3xl font-black text-emerald-500">
-            ₹{(group.total_owed || 0).toLocaleString()}
+            ₹{(groupSummary?.total_owed || 0).toLocaleString()}
           </p>
           <p className="text-[10px] text-muted-foreground mt-1 font-medium italic">People owe you this much in this group</p>
         </div>
@@ -212,7 +215,7 @@ export default function GroupDetailPage() {
             </div>
           </div>
           <p className="text-3xl font-black text-rose-500">
-            ₹{(group.total_owe || 0).toLocaleString()}
+            ₹{(groupSummary?.total_owe || 0).toLocaleString()}
           </p>
           <p className="text-[10px] text-muted-foreground mt-1 font-medium italic">You owe this much in this group</p>
         </div>
