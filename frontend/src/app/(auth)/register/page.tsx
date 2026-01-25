@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 
 import { useRouter } from "next/navigation";
 import { UsersAPI } from "@/lib/api/users";
+import { AuthAPI } from "@/lib/api/auth";
 import { ErrorBox } from "@/components/ui/ErrorBox";
 import { useToast } from "@/components/ui/Toast";
 
@@ -26,18 +27,35 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
+    setError(null);
 
     try {
+      // 1. Register the user
       await UsersAPI.register(formData);
-      toast("Account created successfully! Please sign in.", "success");
-      router.push("/login?registered=true");
+
+      // 2. Automatically login the user
+      const data = (await AuthAPI.login(formData.email, formData.password)) as {
+        access_token: string;
+        refresh_token?: string;
+      };
+
+      // 3. Store tokens
+      localStorage.setItem("token", data.access_token);
+      if (data.refresh_token) {
+        localStorage.setItem("refresh_token", data.refresh_token);
+      }
+
+      toast("Account created! Logging you in...", "success");
+
+      // 4. Redirect to dashboard
+      router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setIsLoading(false);
     }
   };
+
 
   return (
     <motion.div
