@@ -16,6 +16,18 @@ class GroupUpdate(BaseModel):
     description: str | None = None
 
 
+class GroupOut(BaseModel):
+    id: str
+    name: str
+    description: str | None
+    created_by: str | None
+    created_at: datetime
+    member_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
 class GroupMemberOut(BaseModel):
     id: str
     user: UserOut
@@ -26,20 +38,8 @@ class GroupMemberOut(BaseModel):
         from_attributes = True
 
 
-class GroupOut(BaseModel):
-    id: str
-    name: str
-    description: str | None
-    created_by: str | None
-    created_at: datetime
-    members: list[GroupMemberOut] = []
-
-    class Config:
-        from_attributes = True
-
-
 class GroupDetailOut(GroupOut):
-    pass
+    members: list[GroupMemberOut]
 
 
 class AddMemberRequest(BaseModel):

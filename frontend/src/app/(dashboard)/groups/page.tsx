@@ -29,7 +29,7 @@ interface Group {
   id: string;
   name: string;
   owner_id?: string;
-  members?: GroupMember[];
+  member_count?: number;
   balance?: number;
 }
 
@@ -213,7 +213,7 @@ export default function GroupsPage() {
                     {group.name}
                   </h3>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>{group.members?.length || 0} members</span>
+                    <span>{group.member_count || 0} members</span>
                   </div>
                 </div>
 

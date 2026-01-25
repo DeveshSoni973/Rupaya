@@ -4,6 +4,7 @@ import type { PaginatedResponse } from "./types";
 export interface Group {
   id: string;
   name: string;
+  member_count: number;
 }
 
 export interface GroupMember {
@@ -22,6 +23,7 @@ export interface GroupDetail {
   name: string;
   description?: string;
   members: GroupMember[];
+  member_count: number;
 }
 
 export interface GroupCreate {

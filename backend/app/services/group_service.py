@@ -126,7 +126,12 @@ class GroupService:
             order={"created_at": "desc"},
         )
 
-        groups = [m.group for m in memberships if m.group]
+        groups = []
+        for m in memberships:
+            if m.group:
+                g_dict = m.group.model_dump()
+                g_dict["member_count"] = len(m.group.members)
+                groups.append(g_dict)
 
         return {
             "items": groups,
@@ -154,6 +159,7 @@ class GroupService:
 
         data = group.model_dump()
         data["members"] = [m.model_dump() for m in group.members]
+        data["member_count"] = len(group.members)
 
         return data
 
