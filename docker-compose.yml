@@ -31,12 +31,13 @@ services:
       - redisdata:/data
     command: redis-server --appendonly yes
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
-      interval: 10s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
       timeout: 3s
       retries: 5
     networks:
       - rupaya-network
+
 
   backend:
     build: 
@@ -49,6 +50,9 @@ services:
       - SECRET_KEY=super_secret_dev_key
       - PORT=8000
       - HOST=0.0.0.0
+      - WATCHFILES_FORCE_POLLING=true
+      - PYTHONUNBUFFERED=1
+
     ports:
       - "8000:8000"
     volumes:
@@ -73,7 +77,11 @@ services:
     container_name: rupaya-frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
-      - WATCHPACK_POLLING=true
+      - WATCHPACK_POLLING=500
+      - CHOKIDAR_USEPOLLING=true
+      - NEXT_TELEMETRY_DISABLED=1
+
+
     ports:
       - "3000:3000"
     volumes:
