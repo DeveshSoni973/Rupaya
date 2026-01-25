@@ -69,4 +69,9 @@ export const BillsAPI = {
   markShareAsUnpaid(shareId: string) {
     return api.patch<BillShare>(`/bills/shares/${shareId}/mark-unpaid`);
   },
+
+  update(id: string, data: Partial<BillCreate>) {
+    return api.patch<Bill>(`/bills/${id}`, data);
+  },
 };
+

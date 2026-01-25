@@ -21,6 +21,7 @@ interface AddExpenseModalProps {
   initialGroupId?: string;
   members?: GroupMember[];
   groups?: GroupOption[];
+  billToEdit?: any; // Using any for now to avoid circular or missing type, but ideally Bill
 }
 
 export function AddExpenseModal({
@@ -31,7 +32,9 @@ export function AddExpenseModal({
   initialGroupId,
   members: providedMembers,
   groups: providedGroups,
+  billToEdit,
 }: AddExpenseModalProps) {
+
   const [billTitle, setBillTitle] = useState("");
   const [billAmount, setBillAmount] = useState("");
   const [payerId, setPayerId] = useState<string>("");
@@ -51,13 +54,37 @@ export function AddExpenseModal({
   );
 
   useEffect(() => {
-    if (initialGroupId) setSelectedGroupId(initialGroupId);
-  }, [initialGroupId]);
+    if (billToEdit) {
+      setBillTitle(billToEdit.description);
+      setBillAmount(billToEdit.total_amount.toString());
+      setPayerId(billToEdit.paid_by);
+      setSelectedGroupId(billToEdit.group_id);
+      setSelectedMemberIds(billToEdit.shares.map((s: any) => s.user_id));
+      setSplitType(billToEdit.split_type || "EQUAL");
+      if (billToEdit.split_type === "EXACT") {
+        const amounts: Record<string, string> = {};
+        billToEdit.shares.forEach((s: any) => {
+          amounts[s.user_id] = s.amount.toString();
+        });
+        setExactAmounts(amounts);
+      }
+      // For now we don't handle EXACT re-population fully but this is a start
+
+
+    } else {
+      setBillTitle("");
+      setBillAmount("");
+      if (currentUser) setPayerId(currentUser.id);
+      if (initialGroupId) setSelectedGroupId(initialGroupId);
+      // reset others if needed
+    }
+  }, [billToEdit, isOpen, currentUser, initialGroupId]);
 
   useEffect(() => {
     if (providedMembers) setGroupMembers(providedMembers);
     if (providedGroups) setAvailableGroups(providedGroups);
   }, [providedMembers, providedGroups]);
+
 
   // Fetch members if group changes and we don't have them
   useEffect(() => {
@@ -135,20 +162,35 @@ export function AddExpenseModal({
     }
 
     try {
+      if (billToEdit) {
+        await BillsAPI.update(billToEdit.id, {
+          description: billTitle,
+          total_amount: parseFloat(billAmount),
+          paid_by: payerId,
+          split_type: splitType,
+          shares: selectedMemberIds.map((uid) => ({
+            user_id: uid,
+            amount: splitType === "EXACT" ? parseFloat(exactAmounts[uid] || "0") : undefined
+          }))
+        });
 
-      await BillsAPI.create({
-        group_id: selectedGroupId,
-        description: billTitle,
-        total_amount: parseFloat(billAmount),
-        paid_by: payerId,
-        split_type: splitType,
-        shares: selectedMemberIds.map((uid) => ({
-          user_id: uid,
-          amount: splitType === "EXACT" ? parseFloat(exactAmounts[uid] || "0") : undefined
-        }))
-      });
+
+      } else {
+        await BillsAPI.create({
+          group_id: selectedGroupId,
+          description: billTitle,
+          total_amount: parseFloat(billAmount),
+          paid_by: payerId,
+          split_type: splitType,
+          shares: selectedMemberIds.map((uid) => ({
+            user_id: uid,
+            amount: splitType === "EXACT" ? parseFloat(exactAmounts[uid] || "0") : undefined
+          }))
+        });
+      }
 
       onClose();
+      // Only reset if not editing, or always reset? Let's always reset for next open
       setBillTitle("");
       setBillAmount("");
       setExactAmounts({});
@@ -156,7 +198,7 @@ export function AddExpenseModal({
       if (onSuccess) onSuccess();
       window.dispatchEvent(new Event("refresh-summary"));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to add expense");
+      alert(error instanceof Error ? error.message : "Failed to save expense");
     } finally {
       setIsSubmittingBill(false);
     }
@@ -172,14 +214,16 @@ export function AddExpenseModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Add Expense"
-      description="Fill in the details to split a new bill."
+      title={billToEdit ? "Edit Expense" : "Add Expense"}
+      description={billToEdit ? "Update the details of this bill." : "Fill in the details to split a new bill."}
     >
       <form onSubmit={handleAddBill} className="space-y-6">
+
         <div className="space-y-4">
-          {!initialGroupId && (
+          {!initialGroupId && !billToEdit && (
             <div className="space-y-2">
               <label className="text-sm font-medium">Select Group</label>
+
               <div className="relative">
                 <select
                   className="w-full h-11 bg-secondary/50 border border-border rounded-xl px-4 appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -396,7 +440,15 @@ export function AddExpenseModal({
                   </div>
                 )}
               </div>
+
+              {billToEdit && splitType === "EQUAL" && (
+                <p className="text-[10px] text-muted-foreground italic mt-2">
+                  * Changing the total amount will automatically recalculate shares for everyone.
+                </p>
+              )}
             </div>
+
+
           </div>
         </div>
 

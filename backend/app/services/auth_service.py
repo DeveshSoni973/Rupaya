@@ -103,7 +103,8 @@ class AuthService:
 
             user = await prisma.user.find_unique(where={"id": user_id})
             if not user:
-                raise NotFoundError("User not found")
+                raise UnauthorizedError("User no longer exists")
+
 
             new_access = self._create_token({"sub": user_id}, token_type="access")
             return {"access_token": new_access, "token_type": "bearer"}
@@ -131,8 +132,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
         user = await prisma.user.find_unique(where={"id": user_id})
         if not user:
-            raise NotFoundError("User not found")
+            raise UnauthorizedError("User session is no longer valid")
         return user
+
     except JWTError as err:
         raise UnauthorizedError("Invalid token") from err
 

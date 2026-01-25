@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { Settings, Trash2, Wallet, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { GroupsAPI, UsersAPI, type GroupMember, SummaryAPI } from "@/lib/api";
+import { GroupsAPI, UsersAPI, type GroupMember, SummaryAPI, type Bill } from "@/lib/api";
 
 // Extracted Components
 import { GroupHeader } from "@/components/groups/GroupHeader";
@@ -22,30 +22,6 @@ interface Member {
     email: string;
   };
   role: "ADMIN" | "MEMBER";
-}
-
-interface BillShare {
-  id: string;
-  user_id: string;
-  amount: number;
-  paid: boolean;
-  user: {
-    id: string;
-    name: string;
-  };
-}
-
-interface Bill {
-  id: string;
-  description: string;
-  total_amount: number;
-  split_type: "EQUAL" | "EXACT" | "PERCENTAGE";
-  created_at: string;
-  payer: {
-    id: string;
-    name: string;
-  } | null;
-  shares: BillShare[];
 }
 
 interface GroupDetail {
@@ -73,8 +49,8 @@ export default function GroupDetailPage() {
 
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+  const [billToEdit, setBillToEdit] = useState<Bill | null>(null);
 
-  // Moved fetch functions inside useEffect or wrapped in useCallback to satisfy linter
   const fetchGroupDetail = React.useCallback(async () => {
     try {
       const [data, summary] = await Promise.all([
@@ -82,7 +58,6 @@ export default function GroupDetailPage() {
         SummaryAPI.getDashboard(id),
       ]);
 
-      // Transform API data to match local interface expected by MemberList
       const transformedMembers: Member[] = data.members.map((m: GroupMember) => ({
         id: m.id,
         role: (m.role as "ADMIN" | "MEMBER") || "MEMBER",
@@ -93,13 +68,12 @@ export default function GroupDetailPage() {
         }
       }));
 
-      // Construct the local GroupDetail object
       const fullGroup: GroupDetail = {
         id: data.id,
         name: data.name,
-        type: "SHARED", // Default
+        type: "SHARED",
         members: transformedMembers,
-        bills: [], // API doesn't return bills in detail view
+        bills: [],
       };
 
       setGroup(fullGroup);
@@ -132,8 +106,14 @@ export default function GroupDetailPage() {
 
   const handleExpenseAdded = () => {
     setIsAddExpenseOpen(false);
+    setBillToEdit(null);
     setRefreshTrigger((prev) => prev + 1);
     fetchGroupDetail();
+  };
+
+  const handleEditExpense = (bill: Bill) => {
+    setBillToEdit(bill);
+    setIsAddExpenseOpen(true);
   };
 
   const removeMember = async (memberId: string) => {
@@ -170,11 +150,13 @@ export default function GroupDetailPage() {
     <div className="space-y-8 pb-20">
       <GroupHeader
         group={group}
-        onAddExpense={() => setIsAddExpenseOpen(true)}
+        onAddExpense={() => {
+          setBillToEdit(null);
+          setIsAddExpenseOpen(true);
+        }}
         onInviteMember={() => setIsAddMemberOpen(true)}
       />
 
-      {/* Group Quick Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-card border border-border rounded-3xl p-6 relative overflow-hidden group hover:border-primary/50 transition-all">
           <div className="flex items-center justify-between mb-2">
@@ -222,7 +204,6 @@ export default function GroupDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Members & Management - STICKY on Desktop */}
         <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-8">
           <MemberList
             members={group.members}
@@ -252,24 +233,30 @@ export default function GroupDetailPage() {
           </div>
         </div>
 
-        {/* Right Column: Bills/Expenses - Long List */}
         <div className="lg:col-span-8">
           <ExpenseList
             groupId={id}
             currentUserId={currentUser?.id}
-            onAddExpense={() => setIsAddExpenseOpen(true)}
+            onAddExpense={() => {
+              setBillToEdit(null);
+              setIsAddExpenseOpen(true);
+            }}
+            onEditExpense={handleEditExpense}
             refreshTrigger={refreshTrigger}
           />
         </div>
       </div>
 
-      {/* Modals */}
       <AddExpenseModal
         isOpen={isAddExpenseOpen}
-        onClose={() => setIsAddExpenseOpen(false)}
+        onClose={() => {
+          setIsAddExpenseOpen(false);
+          setBillToEdit(null);
+        }}
         onSuccess={handleExpenseAdded}
         currentUser={currentUser}
         initialGroupId={id}
+        billToEdit={billToEdit}
         members={group.members.map((m) => ({
           id: m.user.id,
           name: m.user.name,
@@ -277,7 +264,7 @@ export default function GroupDetailPage() {
           user_id: m.user.id,
           role: "MEMBER",
           user: m.user
-        } as unknown as GroupMember))} // Temporary cast until we fully align AddExpenseModal types
+        } as unknown as GroupMember))}
       />
 
       <InviteMemberModal

@@ -48,6 +48,17 @@ class BillCreate(BillBase):
     shares: list[BillShareCreate]
 
 
+class BillUpdate(BaseModel):
+    description: str | None = None
+    total_amount: float | None = Field(None, gt=0)
+    paid_by: UUID | None = None
+    split_type: SplitType | None = None
+    shares: list[BillShareCreate] | None = None
+
+
+
+
+
 
 class GroupMinimal(BaseModel):
     id: UUID
@@ -65,7 +76,9 @@ class BillResponse(BillBase):
     group: GroupMinimal | None = None
     created_by: UUID
     created_at: datetime
+    split_type: SplitType = SplitType.EQUAL
     shares: list[BillShareResponse] = []
+
 
     class Config:
         from_attributes = True

@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
-from app.models.bills import BillCreate, BillResponse, BillShareResponse
+from app.models.bills import BillCreate, BillResponse, BillShareResponse, BillUpdate
 from app.models.pagination import PaginatedResponse
 from app.models.users import UserOut
 from app.routers.groups import get_group_service
@@ -70,6 +70,21 @@ async def get_bill(
     Get details of a specific bill.
     """
     return await service.get_bill_details(current_user.id, str(bill_id))
+
+
+@router.patch("/{bill_id}", response_model=BillResponse)
+async def update_bill(
+    bill_id: UUID,
+    data: BillUpdate,
+    current_user: UserOut = Depends(get_current_user),
+    service: BillService = Depends(get_bill_service),
+):
+    """
+    Update a bill's details.
+    Anyone in the group can update the bill.
+    """
+    return await service.update_bill(current_user.id, str(bill_id), data)
+
 
 
 @router.patch("/shares/{share_id}/mark-paid", response_model=BillShareResponse)

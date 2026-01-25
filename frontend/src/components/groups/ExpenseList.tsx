@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Receipt, ArrowUpRight, ArrowDownLeft, Loader2, Search } from "lucide-react";
+import { Receipt, ArrowUpRight, ArrowDownLeft, Loader2, Search, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ interface ExpenseListProps {
   groupId: string;
   currentUserId: string | undefined;
   onAddExpense: () => void;
+  onEditExpense: (bill: Bill) => void;
   refreshTrigger?: number;
 }
 
@@ -19,8 +20,10 @@ export function ExpenseList({
   groupId,
   currentUserId,
   onAddExpense,
+  onEditExpense,
   refreshTrigger = 0,
 }: ExpenseListProps) {
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -152,14 +155,25 @@ export function ExpenseList({
                     </p>
                   </div>
                 )}
-                <div className="text-right min-w-[80px]">
-                  <p className="text-base font-black">
-                    ₹{bill.total_amount.toLocaleString()}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground font-medium uppercase">
-                    Total
-                  </p>
+                <div className="text-right min-w-[80px] flex items-center gap-3">
+                  <div>
+                    <p className="text-base font-black">
+                      ₹{bill.total_amount.toLocaleString()}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase">
+                      Total
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-8 h-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
+                    onClick={() => onEditExpense(bill)}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
                 </div>
+
               </div>
             </div>
           );

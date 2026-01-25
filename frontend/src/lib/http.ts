@@ -55,8 +55,22 @@ class ApiClient {
         const data = await response.json();
         message = data.detail ?? message;
       } catch { }
+
+      if (
+        message === "User session is no longer valid" ||
+        message === "User no longer exists" ||
+        message === "User not found"
+      ) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("refresh_token");
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      }
+
       throw new Error(message);
     }
+
 
     if (response.status === 204) {
       return null as T;
