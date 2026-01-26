@@ -11,6 +11,7 @@ import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import { useToast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { UserSearchInput } from "@/components/ui/UserSearchInput";
 
 export default function GroupSettingsPage() {
     const params = useParams();
@@ -32,7 +33,6 @@ export default function GroupSettingsPage() {
     const [memberToChangeRole, setMemberToChangeRole] = useState<any | null>(null);
     const [isChangingRole, setIsChangingRole] = useState(false);
 
-    const [emailToAdd, setEmailToAdd] = useState("");
     const [isAddingMember, setIsAddingMember] = useState(false);
 
 
@@ -134,14 +134,28 @@ export default function GroupSettingsPage() {
         }
     };
 
-    const handleAddMember = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!emailToAdd) return;
+    const handleInviteUser = async (user: any) => {
         setIsAddingMember(true);
         try {
-            await GroupsAPI.addMember(id, { email: emailToAdd, role: "MEMBER" });
-            toast("Member added successfully!", "success");
-            setEmailToAdd("");
+            await GroupsAPI.addMember(id, {
+                email: user.email,
+                user_id: user.id,
+                role: "MEMBER"
+            });
+            toast(`${user.name} added successfully!`, "success");
+            fetchDetails();
+        } catch (error) {
+            toast(error instanceof Error ? error.message : "Failed to add member", "error");
+        } finally {
+            setIsAddingMember(false);
+        }
+    };
+
+    const handleInviteByEmail = async (email: string) => {
+        setIsAddingMember(true);
+        try {
+            await GroupsAPI.addMember(id, { email: email, role: "MEMBER" });
+            toast("Invitation sent successfully!", "success");
             fetchDetails();
         } catch (error) {
             toast(error instanceof Error ? error.message : "Failed to add member", "error");
@@ -244,19 +258,12 @@ export default function GroupSettingsPage() {
 
                         <div className="space-y-4">
                             {/* Add Member Bar */}
-                            <form onSubmit={handleAddMember} className="flex gap-2 p-2 bg-secondary/10 rounded-2xl border border-secondary/20">
-                                <Input
-                                    type="email"
-                                    value={emailToAdd}
-                                    onChange={(e) => setEmailToAdd(e.target.value)}
-                                    placeholder="Invite by email..."
-                                    className="flex-1 bg-transparent border-none shadow-none focus-visible:ring-0 text-sm"
-                                    required
-                                />
-                                <Button type="submit" disabled={isAddingMember} size="sm" className="rounded-xl px-4 gap-2">
-                                    {isAddingMember ? <Loader2 className="w-4 h-4 animate-spin" /> : <><UserPlus className="w-4 h-4" /> Invite</>}
-                                </Button>
-                            </form>
+                            <UserSearchInput
+                                onSelectUser={handleInviteUser}
+                                onInviteByEmail={handleInviteByEmail}
+                                isLoading={isAddingMember}
+                                placeholder="Search by name or invite by email..."
+                            />
 
                             {/* Members List */}
                             <div className="divide-y divide-border/40">
