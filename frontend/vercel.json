@@ -4,14 +4,6 @@
   "installCommand": "bun install",
   "framework": "nextjs",
   "outputDirectory": ".next",
-  "env": {
-    "NEXT_PUBLIC_API_URL": "@rupaya-api-url"
-  },
-  "build": {
-    "env": {
-      "NEXT_PUBLIC_API_URL": "@rupaya-api-url"
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
