@@ -50,6 +50,20 @@ Rupaya/
 └── docker-compose.yml # Multi-container orchestration
 ```
 
+## 📖 Documentation
+
+**New to the project?** Start here:
+
+- 🏠 **[LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md)** - How to run locally (same as before!)
+- 🚀 **[DEPLOYMENT_QUICK_REFERENCE.md](./DEPLOYMENT_QUICK_REFERENCE.md)** - Deploy to production
+- 📊 **[LOCAL_VS_PRODUCTION.md](./LOCAL_VS_PRODUCTION.md)** - Understand the setup
+- 📚 **[DOCUMENTATION_INDEX.md](./DOCUMENTATION_INDEX.md)** - Find any guide quickly
+
+**Quick answers:**
+- **Run locally?** → `docker compose up` (nothing changed!)
+- **Deploy?** → Read [DEPLOYMENT_QUICK_REFERENCE.md](./DEPLOYMENT_QUICK_REFERENCE.md)
+- **docker-compose.yml?** → Still used for local development only
+
 ## Getting Started
 
 ### Prerequisites
@@ -102,6 +116,32 @@ To remove all data (volumes):
 ```bash
 docker compose down -v
 ```
+
+## Deployment
+
+Rupaya is designed to be deployed with:
+- **Backend** → [Render](https://render.com) (with Docker support)
+- **Frontend** → [Vercel](https://vercel.com) (Next.js native support)
+
+📖 **See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment instructions.**
+
+### Quick Deployment Summary
+
+**Backend (Render):**
+1. Push code to GitHub
+2. Create Web Service on Render
+3. Use `backend/Dockerfile.prod`
+4. Add PostgreSQL and Redis
+5. Configure environment variables
+
+**Frontend (Vercel):**
+1. Import project from GitHub
+2. Set root directory to `frontend`
+3. Add `NEXT_PUBLIC_API_URL` environment variable
+4. Deploy!
+
+**Note:** Vercel does NOT support Docker for frontend deployments, but that's perfect since Next.js is natively supported.
+
 
 ## Development
 

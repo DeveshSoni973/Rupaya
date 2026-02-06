@@ -1,136 +1,178 @@
 # Rupaya Backend
 
-## Quick Start with Docker (Recommended)
+FastAPI backend for the Rupaya expense splitting application.
 
-The easiest way to get started is using Docker Compose, which sets up PostgreSQL and Redis automatically.
+## Tech Stack
 
-1.  **Set up environment variables**:
-    ```bash
-    cp .env.example .env
-    ```
-    Then edit `.env` and set your own secure passwords for `POSTGRES_PASSWORD` and `SECRET_KEY`.
+- **Framework**: FastAPI
+- **Database**: PostgreSQL (via Prisma)
+- **Cache**: Redis
+- **ORM**: Prisma
+- **Migrations**: Alembic
+- **Package Manager**: UV
 
-2.  **Start the services**:
-    ```bash
-    docker-compose up -d
-    ```
+## Local Development
 
-3.  **Verify services are running**:
-    ```bash
-    docker-compose ps
-    ```
+### Prerequisites
 
-4.  **View logs** (optional):
-    ```bash
-    docker-compose logs -f
-    ```
+- Python 3.11+
+- UV package manager
+- Docker & Docker Compose (for database)
 
-5.  **Stop the services**:
-    ```bash
-    docker-compose down
-    ```
+### Setup
 
-6.  **Stop and remove volumes** (⚠️ deletes all data):
-    ```bash
-    docker-compose down -v
-    ```
+1. **Install dependencies**
+   ```bash
+   uv sync
+   ```
 
-### Docker Services
+2. **Start services** (PostgreSQL, Redis)
+   ```bash
+   docker-compose up -d postgres redis
+   ```
 
-The `docker-compose.yml` includes:
+3. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
 
-- **PostgreSQL 16** (Alpine)
-  - Port: `5432`
-  - User: Set via `POSTGRES_USER` in `.env` (default: `postgres`)
-  - Password: Set via `POSTGRES_PASSWORD` in `.env`
-  - Database: Set via `POSTGRES_DB` in `.env` (default: `rupaya`)
-  - Container: `rupaya-postgres`
+4. **Run migrations**
+   ```bash
+   uv run alembic upgrade head
+   ```
 
-- **Redis 7.2** (Alpine)
-  - Port: `6379`
-  - Persistence: Enabled (AOF)
-  - Container: `rupaya-redis`
+5. **Start development server**
+   ```bash
+   uv run python start.py
+   ```
 
-- **pgAdmin 4** (Latest)
-  - Web UI: `http://localhost:5050`
-  - Email: Set via `PGADMIN_EMAIL` in `.env` (default: `admin@admin.com`)
-  - Password: Set via `PGADMIN_PASSWORD` in `.env` (default: `admin`)
-  - Container: `rupaya-pgadmin`
+The API will be available at `http://localhost:8000`
+- API docs: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
 
-### Accessing pgAdmin
+## Production Deployment
 
-1. Open your browser and go to: `http://localhost:5050`
-2. Login with the credentials from your `.env` file (default: `admin@admin.com` / `admin`)
-3. Add a new server connection:
-   - **General Tab:**
-     - Name: `Rupaya Local`
-   - **Connection Tab:**
-     - Host: `rupaya-postgres` (or `postgres` - the container name)
-     - Port: `5432`
-     - Maintenance database: `rupaya` (or your `POSTGRES_DB` value)
-     - Username: `postgres` (or your `POSTGRES_USER` value)
-     - Password: Your `POSTGRES_PASSWORD` value
-     - Save password: ✅ (optional)
+### Deploy to Render
 
-### Connection Strings for Docker
+See [DEPLOYMENT.md](../DEPLOYMENT.md) for detailed instructions.
 
-When using Docker Compose, use these connection strings in your `.env`:
+**Quick steps:**
 
-```env
-DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}"
-REDIS_URL="redis://localhost:6379"
-```
+1. Push code to GitHub
+2. Create new Web Service on Render
+3. Configure:
+   - Runtime: Docker
+   - Dockerfile: `./Dockerfile.prod`
+   - Add PostgreSQL database
+   - Add Redis instance
+   - Set environment variables
+4. Deploy!
 
-## Manual Setup (Without Docker)
+### Environment Variables
 
-1.  **Install Dependencies**:
-    ```bash
-    uv sync
-    ```
+Required for production:
 
-2.  **Apply Migrations**:
-    ```bash
-    uv run alembic upgrade head
-    ```
-
-3.  **Start the Server**:
-    ```bash
-    uv run start.py
-    ```
-    This will start the server on the port specified in your `.env` file.
-
-    Alternative methods:
-    ```bash
-    uv run uvicorn app.main:app --reload --port 8000
-    ```
-
-## Environment Variables
-
-Make sure you have a `.env` file with:
-- `DATABASE_URL` - PostgreSQL database connection string
-- `SECRET_KEY` - Secret key for JWT tokens
-- `REDIS_URL` - Redis connection URL
-- `PORT` - Port number for the backend server (default: 8000)
-- `HOST` - Host address to bind to (default: 0.0.0.0)
-
-## Code Quality
-
-**Lint** (check for issues):
 ```bash
-uv run ruff check .
+DATABASE_URL=postgresql://user:pass@host:5432/db
+REDIS_URL=redis://host:6379
+SECRET_KEY=your-secret-key
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
+ALLOWED_ORIGINS=https://your-frontend.vercel.app
+HOST=0.0.0.0
+PORT=8000
 ```
 
-**Format** (auto-fix formatting):
-```bash
-uv run ruff format .
+## Project Structure
+
+```
+backend/
+├── app/
+│   ├── core/           # Core configuration and utilities
+│   ├── db/             # Database models and connection
+│   ├── models/         # Pydantic models
+│   ├── routers/        # API endpoints
+│   ├── services/       # Business logic
+│   └── main.py         # FastAPI application
+├── alembic/            # Database migrations
+├── Dockerfile          # Development Docker image
+├── Dockerfile.prod     # Production Docker image
+├── render.yaml         # Render deployment config
+├── pyproject.toml      # Python dependencies
+└── start.py            # Application entry point
 ```
 
-**Lint and auto-fix**:
+## API Endpoints
+
+### Authentication
+- `POST /api/v1/auth/register` - Register new user
+- `POST /api/v1/auth/login` - Login user
+- `POST /api/v1/auth/refresh` - Refresh access token
+
+### Users
+- `GET /api/v1/users/me` - Get current user
+- `GET /api/v1/users/search` - Search users
+
+### Groups
+- `GET /api/v1/groups` - List user's groups
+- `POST /api/v1/groups` - Create group
+- `GET /api/v1/groups/{id}` - Get group details
+- `PUT /api/v1/groups/{id}` - Update group
+- `DELETE /api/v1/groups/{id}` - Delete group
+- `POST /api/v1/groups/{id}/members` - Add member
+- `DELETE /api/v1/groups/{id}/members/{user_id}` - Remove member
+
+### Bills
+- `GET /api/v1/groups/{id}/bills` - List group bills
+- `POST /api/v1/groups/{id}/bills` - Create bill
+- `PUT /api/v1/bills/{id}` - Update bill
+- `DELETE /api/v1/bills/{id}` - Delete bill
+
+### Summary
+- `GET /api/v1/users/summary` - Get user financial summary
+- `GET /api/v1/groups/{id}/summary` - Get group summary
+
+## Database Migrations
+
 ```bash
-uv run ruff check --fix .
+# Create new migration
+uv run alembic revision --autogenerate -m "description"
+
+# Apply migrations
+uv run alembic upgrade head
+
+# Rollback migration
+uv run alembic downgrade -1
 ```
 
-**Run both lint and format**:
+## Testing
+
 ```bash
-uv run ruff check --fix . && uv run ruff format .
+# Run tests (when implemented)
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=app
 ```
+
+## Troubleshooting
+
+### Database connection issues
+- Ensure PostgreSQL is running
+- Check `DATABASE_URL` is correct
+- Verify network connectivity
+
+### Migration errors
+- Check Alembic configuration
+- Ensure database is accessible
+- Review migration files for conflicts
+
+### CORS errors
+- Set `ALLOWED_ORIGINS` environment variable
+- Include your frontend URL in allowed origins
+
+## License
+
+MIT

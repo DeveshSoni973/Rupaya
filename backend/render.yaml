@@ -1,0 +1,53 @@
+services:
+  # Backend API Service
+  - type: web
+    name: rupaya-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.prod
+    region: oregon
+    plan: free
+    branch: main
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 30
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: 7
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 8000
+      - key: PYTHONUNBUFFERED
+        value: 1
+
+  # PostgreSQL Database
+  - type: pserv
+    name: rupaya-postgres
+    runtime: docker
+    dockerfilePath: ./Dockerfile.postgres
+    plan: free
+    disk:
+      name: rupaya-db-data
+      mountPath: /var/lib/postgresql/data
+      sizeGB: 1
+
+  # Redis Cache
+  - type: redis
+    name: rupaya-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+databases:
+  - name: rupaya-db
+    databaseName: rupaya
+    user: rupaya
+    plan: free

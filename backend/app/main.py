@@ -16,10 +16,22 @@ from app.routers import auth, bills, groups, users, summary
 
 app = FastAPI(title="Rupaya API", openapi_url=f"{settings.api_base_path}/openapi.json")
 
-# Enable CORS
+# Enable CORS - Configure based on environment
+# In production, you should set ALLOWED_ORIGINS environment variable
+import os
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+if allowed_origins == ["*"]:
+    # Development mode - allow common local origins
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "*"  # Allow all for development
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development, allow all
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -58,4 +70,11 @@ app.include_router(summary.router, prefix=settings.api_base_path)
 @app.get("/")
 async def root():
     return {"message": "Rupaya API running 🚀", "docs": "/docs", "version": "v1"}
+
+
+@app.get("/health")
+@app.get(f"{settings.api_base_path}/health")
+async def health_check():
+    """Health check endpoint for deployment platforms"""
+    return {"status": "healthy", "service": "rupaya-api"}
 
