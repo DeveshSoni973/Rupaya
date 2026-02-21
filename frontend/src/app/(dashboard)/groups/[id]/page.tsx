@@ -2,10 +2,23 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Settings, Trash2, Wallet, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import {
+  Settings,
+  Trash2,
+  Wallet,
+  ArrowUpRight,
+  ArrowDownLeft,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { GroupsAPI, UsersAPI, type GroupMember, SummaryAPI, type Bill } from "@/lib/api";
+import {
+  GroupsAPI,
+  UsersAPI,
+  type GroupMember,
+  SummaryAPI,
+  type Bill,
+} from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
 
 // Extracted Components
 import { GroupHeader } from "@/components/groups/GroupHeader";
@@ -16,7 +29,6 @@ import { InviteMemberModal } from "@/components/groups/InviteMemberModal";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 
 import { useRouter } from "next/navigation";
-
 
 interface Member {
   id: string;
@@ -33,7 +45,7 @@ interface GroupDetail {
   name: string;
   type: string;
   members: Member[];
-  bills: Bill[];
+  bills?: Bill[] | null;
 }
 
 interface GroupSummary {
@@ -45,7 +57,7 @@ export default function GroupDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
-
+  const { toast } = useToast();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [groupSummary, setGroupSummary] = useState<GroupSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,61 +75,67 @@ export default function GroupDetailPage() {
   const [memberToRemove, setMemberToRemove] = useState<string | null>(null);
   const [isRemovingMember, setIsRemovingMember] = useState(false);
 
-
-
-
   const isAdmin = React.useMemo(() => {
     if (!group || !currentUser) return false;
-    const membership = group.members.find(m => m.user.id === currentUser.id);
+    const membership = group.members.find((m) => m.user.id === currentUser.id);
     return membership?.role === "ADMIN";
   }, [group, currentUser]);
 
   const handleLeaveGroup = async () => {
     if (!currentUser) return;
+    const idToRemove = group?.members.find(
+      (m) => m.user.id === currentUser.id,
+    )?.id;
+    if (!id || !idToRemove) return;
     setIsLeaving(true);
     try {
-      await GroupsAPI.removeMember(id, currentUser.id);
+      await GroupsAPI.removeMember(id, idToRemove);
+      toast("You have left the group", "success");
       router.push("/groups");
       window.dispatchEvent(new Event("refresh-summary"));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to leave group");
+      toast(
+        error instanceof Error ? error.message : "Failed to leave group",
+        "error",
+      );
     } finally {
       setIsLeaving(false);
       setIsLeaveModalOpen(false);
     }
   };
 
-
   const fetchGroupDetail = React.useCallback(async () => {
     try {
-      const [data, summary] = await Promise.all([
+      const [data] = await Promise.all([
         GroupsAPI.getDetail(id),
-        SummaryAPI.getDashboard(id),
+        // SummaryAPI.getDashboard(id),
       ]);
 
-      const transformedMembers: Member[] = data.members.map((m: GroupMember) => ({
-        id: m.id,
-        role: (m.role as "ADMIN" | "MEMBER") || "MEMBER",
-        user: {
-          id: m.user.id,
-          name: m.user.name,
-          email: m.user.email
-        }
-      }));
+      const transformedMembers: Member[] = data.members.map(
+        (m: GroupMember) => ({
+          id: m.id,
+          role: (m.role as "ADMIN" | "MEMBER") || "MEMBER",
+          user: {
+            id: m.user.id,
+            name: m.user.name,
+            email: m.user.email,
+          },
+        }),
+      );
 
       const fullGroup: GroupDetail = {
         id: data.id,
         name: data.name,
         type: "SHARED",
         members: transformedMembers,
-        bills: [],
+        bills: null,
       };
 
       setGroup(fullGroup);
-      setGroupSummary({
-        total_owed: summary.total_owed,
-        total_owe: summary.total_owe,
-      });
+      // setGroupSummary({
+      //   total_owed: summary.total_owed,
+      //   total_owe: summary.total_owe,
+      // });
     } catch (error) {
       console.error("Failed to fetch group:", error);
     } finally {
@@ -164,14 +182,17 @@ export default function GroupDetailPage() {
       await GroupsAPI.removeMember(id, memberToRemove);
       fetchGroupDetail();
       window.dispatchEvent(new Event("refresh-summary"));
+      toast("Member removed from group", "success");
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to remove member");
+      toast(
+        error instanceof Error ? error.message : "Failed to remove member",
+        "error",
+      );
     } finally {
       setIsRemovingMember(false);
       setMemberToRemove(null);
     }
   };
-
 
   if (loading) {
     return (
@@ -206,25 +227,55 @@ export default function GroupDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-card border border-border rounded-3xl p-6 relative overflow-hidden group hover:border-primary/50 transition-all">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Balance</p>
-            <div className={cn(
-              "p-2 rounded-xl",
-              ((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)) > 0 ? "bg-emerald-500/10 text-emerald-500" : ((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)) < 0 ? "bg-rose-500/10 text-rose-500" : "bg-primary/10 text-primary"
-            )}>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Total Balance
+            </p>
+            <div
+              className={cn(
+                "p-2 rounded-xl",
+                (groupSummary?.total_owed || 0) -
+                  (groupSummary?.total_owe || 0) >
+                  0
+                  ? "bg-emerald-500/10 text-emerald-500"
+                  : (groupSummary?.total_owed || 0) -
+                        (groupSummary?.total_owe || 0) <
+                      0
+                    ? "bg-rose-500/10 text-rose-500"
+                    : "bg-primary/10 text-primary",
+              )}
+            >
               <Wallet className="w-4 h-4" />
             </div>
           </div>
-          <p className={cn(
-            "text-3xl font-black",
-            ((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)) > 0 ? "text-emerald-500" : ((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)) < 0 ? "text-rose-500" : "text-foreground"
-          )}>
-            {((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)) > 0 ? "+" : ""}₹{((groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)).toLocaleString()}
+          <p
+            className={cn(
+              "text-3xl font-black",
+              (groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0) >
+                0
+                ? "text-emerald-500"
+                : (groupSummary?.total_owed || 0) -
+                      (groupSummary?.total_owe || 0) <
+                    0
+                  ? "text-rose-500"
+                  : "text-foreground",
+            )}
+          >
+            {(groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0) >
+            0
+              ? "+"
+              : ""}
+            ₹
+            {(
+              (groupSummary?.total_owed || 0) - (groupSummary?.total_owe || 0)
+            ).toLocaleString()}
           </p>
         </div>
 
         <div className="bg-card border border-border rounded-3xl p-6 relative overflow-hidden group hover:border-emerald-500/50 transition-all">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Owed</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Total Owed
+            </p>
             <div className="bg-emerald-500/10 p-2 rounded-xl text-emerald-500">
               <ArrowUpRight className="w-4 h-4" />
             </div>
@@ -232,12 +283,16 @@ export default function GroupDetailPage() {
           <p className="text-3xl font-black text-emerald-500">
             ₹{(groupSummary?.total_owed || 0).toLocaleString()}
           </p>
-          <p className="text-[10px] text-muted-foreground mt-1 font-medium italic">People owe you this much in this group</p>
+          <p className="text-[10px] text-muted-foreground mt-1 font-medium italic">
+            People owe you this much in this group
+          </p>
         </div>
 
         <div className="bg-card border border-border rounded-3xl p-6 relative overflow-hidden group hover:border-rose-500/50 transition-all">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Owe</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Total Owe
+            </p>
             <div className="bg-rose-500/10 p-2 rounded-xl text-rose-500">
               <ArrowDownLeft className="w-4 h-4" />
             </div>
@@ -245,7 +300,9 @@ export default function GroupDetailPage() {
           <p className="text-3xl font-black text-rose-500">
             ₹{(groupSummary?.total_owe || 0).toLocaleString()}
           </p>
-          <p className="text-[10px] text-muted-foreground mt-1 font-medium italic">You owe this much in this group</p>
+          <p className="text-[10px] text-muted-foreground mt-1 font-medium italic">
+            You owe this much in this group
+          </p>
         </div>
       </div>
 
@@ -271,9 +328,6 @@ export default function GroupDetailPage() {
                 <Settings className="w-4 h-4 mr-3" /> Group Settings
               </Button>
 
-
-
-
               <Button
                 variant="ghost"
                 className="w-full justify-start text-sm h-10 rounded-xl text-rose-500 hover:bg-rose-500/5 hover:text-rose-600"
@@ -281,7 +335,6 @@ export default function GroupDetailPage() {
               >
                 <Trash2 className="w-4 h-4 mr-3" /> Leave Group
               </Button>
-
             </div>
           </div>
         </div>
@@ -310,14 +363,17 @@ export default function GroupDetailPage() {
         currentUser={currentUser}
         initialGroupId={id}
         billToEdit={billToEdit}
-        members={group.members.map((m) => ({
-          id: m.user.id,
-          name: m.user.name,
-          email: m.user.email,
-          user_id: m.user.id,
-          role: "MEMBER",
-          user: m.user
-        } as unknown as GroupMember))}
+        members={group.members.map(
+          (m) =>
+            ({
+              id: m.user.id,
+              name: m.user.name,
+              email: m.user.email,
+              user_id: m.user.id,
+              role: "MEMBER",
+              user: m.user,
+            }) as unknown as GroupMember,
+        )}
       />
 
       <InviteMemberModal
@@ -326,8 +382,6 @@ export default function GroupDetailPage() {
         groupId={id}
         onSuccess={fetchGroupDetail}
       />
-
-
 
       <ConfirmationModal
         isOpen={!!memberToRemove}
@@ -350,8 +404,6 @@ export default function GroupDetailPage() {
         variant="destructive"
         isLoading={isLeaving}
       />
-
     </div>
-
   );
 }
