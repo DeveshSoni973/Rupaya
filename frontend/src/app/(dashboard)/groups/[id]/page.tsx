@@ -14,6 +14,7 @@ import { BillList } from "@/components/bills/BillList";
 import { AddBillModal } from "@/components/bills/AddBillModal";
 import { InviteMemberModal } from "@/components/groups/InviteMemberModal";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
+import { SettleUpPanel } from "@/components/groups/SettleUpPanel";
 import { useWebSocket } from "@/components/providers/WebSocketProvider";
 
 import { useRouter } from "next/navigation";
@@ -276,6 +277,8 @@ export default function GroupDetailPage() {
             onInviteMember={() => setIsAddMemberOpen(true)}
             onRemoveMember={removeMember}
           />
+
+          <SettleUpPanel groupId={id} currentUserId={currentUser?.id} />
 
           <div className="bg-card border border-border rounded-2xl p-6">
             <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-4">

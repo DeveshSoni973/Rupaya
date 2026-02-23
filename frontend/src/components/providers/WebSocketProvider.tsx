@@ -41,6 +41,21 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
                     toast(`${message.created_by_name} added a new bill: ${message.description}`, 'success');
                 } else if (message.type === 'UPDATE_BILL') {
                     toast(`Bill updated: ${message.description}`, 'info');
+                } else if (message.type === 'SETTLE_UP') {
+                    const names = message.settled_with || [];
+                    let namesText = '';
+
+                    if (names.length === 1) {
+                        namesText = names[0];
+                    } else if (names.length === 2) {
+                        namesText = `${names[0]} and ${names[1]}`;
+                    } else if (names.length > 2) {
+                        namesText = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+                    } else {
+                        namesText = 'everyone';
+                    }
+
+                    toast(`${message.user_name} settled with ${namesText}`, 'success');
                 }
 
                 // Notify all subscribers for this group

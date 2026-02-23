@@ -23,9 +23,36 @@ export interface SummaryData {
   friends: Friend[];
 }
 
+export interface DebtUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface DebtTransaction {
+  from: DebtUser;
+  to: DebtUser;
+  amount: number;
+}
+
+export interface SettleUpResult {
+  settled_count: number;
+  total_amount: number;
+}
+
 export const SummaryAPI = {
   getDashboard(groupId?: string) {
     const params = groupId ? `?group_id=${groupId}` : "";
     return api.get<SummaryData>(`/summary/${params}`);
+  },
+
+  getDebts(groupId: string) {
+    return api.get<DebtTransaction[]>(`/summary/debts?group_id=${groupId}`);
+  },
+
+  settleUp(groupId: string) {
+    return api.post<SettleUpResult>(`/summary/settle`, {
+      group_id: groupId,
+    });
   },
 };

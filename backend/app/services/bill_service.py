@@ -217,17 +217,35 @@ class BillService:
             if count == 0:
                 raise ValidationError("At least one person must be involved in the split")
 
-            individual_amount = total_amount / count
+            # Round to 2 decimal places
+            base_amount = round(total_amount / count, 2)
+            
+            # To avoid precision errors (e.g., 10/3 = 3.33, 3.33*3 = 9.99), 
+            # we give the remainder to the first involved person.
+            # In a real app, you might want to give it to the payer or a specific person.
+            total_distributed = base_amount * count
+            diff = round(total_amount - total_distributed, 2)
             
             involved_ids = {str(s.user_id) for s in involved_shares}
-            return [
-                {
-                    "user_id": str(share.user_id),
-                    "amount": individual_amount if str(share.user_id) in involved_ids else 0,
-                    "paid": str(share.user_id) == paid_by,
-                }
-                for share in shares_input
-            ]
+            results = []
+            remainder_applied = False
+
+            for share in shares_input:
+                uid = str(share.user_id)
+                if uid in involved_ids:
+                    amt = base_amount
+                    if not remainder_applied:
+                        amt = round(base_amount + diff, 2)
+                        remainder_applied = True
+                else:
+                    amt = 0
+                
+                results.append({
+                    "user_id": uid,
+                    "amount": amt,
+                    "paid": uid == paid_by,
+                })
+            return results
 
         elif st_str == st_exact or st_str == "EXACT":
             total_shares = sum(share.amount or 0 for share in shares_input)
