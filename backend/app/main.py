@@ -13,6 +13,10 @@ from app.core.exceptions import (
 )
 
 from app.routers import auth, bills, groups, users, summary
+from app.services.socket_manager import socket_manager
+from app.services.auth_service import get_current_user
+from app.db.session import get_db
+from fastapi import WebSocket, WebSocketDisconnect, Depends
 
 app = FastAPI(title="Rupaya API", openapi_url=f"{settings.api_base_path}/openapi.json")
 
@@ -65,6 +69,43 @@ app.include_router(users.router, prefix=settings.api_base_path)
 app.include_router(groups.router, prefix=settings.api_base_path)
 app.include_router(bills.router, prefix=settings.api_base_path)
 app.include_router(summary.router, prefix=settings.api_base_path)
+
+
+@app.websocket("/ws/{group_id}")
+async def websocket_endpoint(websocket: WebSocket, group_id: str, token: str = None):
+    # If token is not provided in query, check headers (though query is more common for WS)
+    if not token:
+        token = websocket.query_params.get("token")
+    
+    try:
+        # Simple token verification (we can't use Depends(get_current_user) directly for WS in all cases easily)
+        # For now, let's accept the connection and verify later or use a dedicated helper
+        # Actually, let's try to verify it now
+        from app.core.security import jwt
+        from app.core.config import settings
+        
+        if not token:
+            await websocket.close(code=1008)
+            return
+
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            await websocket.close(code=1008)
+            return
+            
+    except Exception:
+        await websocket.close(code=1008)
+        return
+
+    await socket_manager.connect(websocket, group_id)
+    try:
+        while True:
+            # Keep connection alive and listen for any client messages if needed
+            data = await websocket.receive_text()
+            # We can handle client messages here (e.g., heartbeats)
+    except WebSocketDisconnect:
+        socket_manager.disconnect(websocket, group_id)
 
 
 @app.get("/")

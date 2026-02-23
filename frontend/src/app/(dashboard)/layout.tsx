@@ -82,8 +82,9 @@ export default function DashboardLayout({
         currentUser={currentUser}
         onSuccess={() => {
           setIsAddBillOpen(false);
-          // We might want a way to refresh the current page's data
-          window.location.reload(); // Simple way for now, or use context/event bus
+          // Refreshes are handled via events or page-specific logic
+          window.dispatchEvent(new Event("refresh-summary"));
+          window.dispatchEvent(new Event("refresh-bills"));
         }}
       />
     </div>

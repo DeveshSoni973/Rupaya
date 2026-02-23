@@ -15,6 +15,7 @@ from app.models.bills import BillCreate, BillUpdate
 # Note: app.models.bills.SplitType might be same as app.db.models.SplitType if imported? 
 # If not, let's use the DB one for DB ops.
 from app.services.group_service import GroupService
+from app.services.socket_manager import socket_manager
 
 
 class BillService:
@@ -68,7 +69,18 @@ class BillService:
         await self.db.refresh(bill)
         
         # Load relations for return
-        return await self.get_bill_details(user_id, str(bill.id))
+        bill_details = await self.get_bill_details(user_id, str(bill.id))
+        
+        # Broadcast update
+        await socket_manager.broadcast_to_group(str(data.group_id), {
+            "type": "NEW_BILL",
+            "bill_id": str(bill.id),
+            "description": bill.description,
+            "total_amount": float(bill.total_amount),
+            "created_by_name": (await self.db.get(User, user_id)).name if isinstance(user_id, UUID) else user_id
+        })
+
+        return bill_details
 
 
     async def update_bill(self, user_id: UUID | str, bill_id: UUID | str, data: BillUpdate):
@@ -168,7 +180,16 @@ class BillService:
         await self.db.commit()
 
         # 5. Return full bill details
-        return await self.get_bill_details(user_id, bill_id)
+        bill_details = await self.get_bill_details(user_id, bill_id)
+
+        # Broadcast update
+        await socket_manager.broadcast_to_group(str(bill.group_id), {
+            "type": "UPDATE_BILL",
+            "bill_id": str(bill_id),
+            "description": bill.description
+        })
+
+        return bill_details
 
 
     def _calculate_shares(
@@ -352,6 +373,16 @@ class BillService:
         share.updated_at = datetime.utcnow()
         await self.db.commit()
         await self.db.refresh(share)
+        
+        # Broadcast update
+        await socket_manager.broadcast_to_group(str(share.bill.group_id), {
+            "type": "PAYMENT_UPDATE",
+            "bill_id": str(share.bill_id),
+            "share_id": str(share_id),
+            "paid": True,
+            "user_id": str(share.user_id)
+        })
+        
         return share
 
     async def mark_share_as_unpaid(self, user_id: str, share_id: str):
@@ -383,4 +414,14 @@ class BillService:
         share.updated_at = datetime.utcnow()
         await self.db.commit()
         await self.db.refresh(share)
+
+        # Broadcast update
+        await socket_manager.broadcast_to_group(str(share.bill.group_id), {
+            "type": "PAYMENT_UPDATE",
+            "bill_id": str(share.bill_id),
+            "share_id": str(share_id),
+            "paid": False,
+            "user_id": str(share.user_id)
+        })
+
         return share

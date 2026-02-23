@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 import { ToastProvider } from "@/components/ui/Toast";
+import { WebSocketProvider } from "@/components/providers/WebSocketProvider";
 
 export default function RootLayout({
   children,
@@ -30,7 +31,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
         <ToastProvider>
-          {children}
+          <WebSocketProvider>
+            {children}
+          </WebSocketProvider>
         </ToastProvider>
       </body>
     </html>

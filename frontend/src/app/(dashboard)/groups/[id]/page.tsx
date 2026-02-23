@@ -14,6 +14,7 @@ import { BillList } from "@/components/bills/BillList";
 import { AddBillModal } from "@/components/bills/AddBillModal";
 import { InviteMemberModal } from "@/components/groups/InviteMemberModal";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
+import { useWebSocket } from "@/components/providers/WebSocketProvider";
 
 import { useRouter } from "next/navigation";
 
@@ -44,6 +45,7 @@ interface GroupSummary {
 export default function GroupDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { subscribe } = useWebSocket();
   const id = params?.id as string;
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
@@ -140,6 +142,23 @@ export default function GroupDetailPage() {
       fetchCurrentUser();
     }
   }, [id, fetchGroupDetail]);
+
+  useEffect(() => {
+    if (!id) return;
+
+    // Subscribe to group updates
+    const unsubscribe = subscribe(id, (message) => {
+      console.log("WebSocket message received:", message);
+      // Refresh the group details and summary
+      fetchGroupDetail();
+      // Increase refresh trigger to notify BillList
+      setRefreshTrigger(prev => prev + 1);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [id, subscribe, fetchGroupDetail]);
 
   const handleBillAdded = () => {
     setIsAddBillOpen(false);
