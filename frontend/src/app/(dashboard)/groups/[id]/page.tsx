@@ -106,10 +106,11 @@ export default function GroupDetailPage() {
 
   const fetchGroupDetail = React.useCallback(async () => {
     try {
-      const [data] = await Promise.all([
+      const [data, summary] = await Promise.all([
         GroupsAPI.getDetail(id),
-        // SummaryAPI.getDashboard(id),
+        SummaryAPI.getDashboard(id),
       ]);
+      console.log(summary);
 
       const transformedMembers: Member[] = data.members.map(
         (m: GroupMember) => ({
@@ -132,10 +133,10 @@ export default function GroupDetailPage() {
       };
 
       setGroup(fullGroup);
-      // setGroupSummary({
-      //   total_owed: summary.total_owed,
-      //   total_owe: summary.total_owe,
-      // });
+      setGroupSummary({
+        total_owed: summary.total_owed,
+        total_owe: summary.total_owe,
+      });
     } catch (error) {
       console.error("Failed to fetch group:", error);
     } finally {

@@ -33,7 +33,9 @@ export default function DashboardPage() {
   const router = useRouter();
   const [data, setData] = React.useState<SummaryData | null>(null);
   const [recentBills, setRecentBills] = React.useState<Bill[]>([]);
-  const [user, setUser] = React.useState<{ name: string; id: string } | null>(null);
+  const [user, setUser] = React.useState<{ name: string; id: string } | null>(
+    null,
+  );
   const [loading, setLoading] = React.useState(true);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
 
@@ -69,11 +71,15 @@ export default function DashboardPage() {
   React.useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && recentBills.length && recentBills.length >= 5) {
+        if (
+          entries[0].isIntersecting &&
+          recentBills.length &&
+          recentBills.length >= 5
+        ) {
           handle3DTransition();
         }
       },
-      { threshold: 0.1, rootMargin: "0px 0px -50px 0px" }
+      { threshold: 0.1, rootMargin: "0px 0px -50px 0px" },
     );
 
     if (scrollSentinelRef.current) {
@@ -139,12 +145,12 @@ export default function DashboardPage() {
         animate={
           isTransitioning
             ? {
-              opacity: 0,
-              rotateX: 45,
-              scale: 0.8,
-              z: -500,
-              transition: { duration: 0.8, ease: [0.4, 0, 0.2, 1] },
-            }
+                opacity: 0,
+                rotateX: 45,
+                scale: 0.8,
+                z: -500,
+                transition: { duration: 0.8, ease: [0.4, 0, 0.2, 1] },
+              }
             : { opacity: 1, rotateX: 0, scale: 1, z: 0 }
         }
         className="space-y-8 [perspective:1200px]"
@@ -154,8 +160,8 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
             <p className="text-muted-foreground">
-              Welcome back, {user?.name.split(" ")[0] || "User"}. Here&apos;s your
-              bill summary.
+              Welcome back, {user?.name.split(" ")[0] || "User"}. Here&apos;s
+              your bill summary.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -167,7 +173,6 @@ export default function DashboardPage() {
               New Bill
             </Button>
           </div>
-
         </div>
 
         {/* Stats Grid */}
@@ -233,11 +238,16 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   {/* 3D Scroll Sentinel */}
-                  <div ref={scrollSentinelRef} className="h-20 flex items-center justify-center">
+                  <div
+                    ref={scrollSentinelRef}
+                    className="h-20 flex items-center justify-center"
+                  >
                     {recentBills.length && recentBills.length >= 5 && (
                       <div className="flex flex-col items-center gap-2">
                         <div className="w-1 h-8 bg-gradient-to-b from-primary to-transparent animate-bounce rounded-full" />
-                        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40">Diving into history</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40">
+                          Diving into history
+                        </p>
                       </div>
                     )}
                   </div>

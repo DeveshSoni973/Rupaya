@@ -17,9 +17,9 @@ export default function LandingPage() {
     }
   }, [router]);
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-100 text-foreground selection:bg-primary/20">
       {/* Nav */}
-      <nav className="fixed top-0 w-full z-50 glass border-b border-border/50">
+      <nav className="fixed top-0 w-full z-50 bg-gradient-to-r from-emerald-100 via-white to-green-200 backdrop-blur-md border-b border-emerald-100">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
@@ -29,10 +29,12 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-4">
             <Link href="/login">
-              <Button variant="ghost" size="sm">Sign In</Button>
+              <Button variant="ghost" size="md">
+                Sign In
+              </Button>
             </Link>
             <Link href="/register">
-              <Button size="sm">Get Started</Button>
+              <Button size="md">Get Started</Button>
             </Link>
           </div>
         </div>
@@ -53,18 +55,25 @@ export default function LandingPage() {
               Manage bills <br /> without the stress.
             </h1>
             <p className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
-              Track, split, and settle group bills effortlessly.
-              Beautifully designed for modern teams and friends.
+              Track, split, and settle group bills effortlessly. Beautifully
+              designed for modern teams and friends.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link href="/register">
-                <Button size="lg" className="h-14 px-8 text-lg rounded-full group">
+                <Button
+                  size="lg"
+                  className="h-14 px-8 text-lg rounded-full group"
+                >
                   Start for free
                   <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
                 </Button>
               </Link>
               <Link href="/login">
-                <Button variant="outline" size="lg" className="h-14 px-8 text-lg rounded-full">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="h-14 px-8 text-lg rounded-full"
+                >
                   Try Demo
                 </Button>
               </Link>
@@ -79,16 +88,33 @@ export default function LandingPage() {
             className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-32"
           >
             {[
-              { icon: Zap, title: "Lightning Fast", desc: "Add bills in seconds with our intuitive interface." },
-              { icon: Shield, title: "Secure", desc: "Your financial data is encrypted and private." },
-              { icon: Heart, title: "Fair Splitting", desc: "Multiple splitting methods for every situation." }
+              {
+                icon: Zap,
+                title: "Lightning Fast",
+                desc: "Add bills in seconds with our intuitive interface.",
+              },
+              {
+                icon: Shield,
+                title: "Secure",
+                desc: "Your financial data is encrypted and private.",
+              },
+              {
+                icon: Heart,
+                title: "Fair Splitting",
+                desc: "Multiple splitting methods for every situation.",
+              },
             ].map((feature, i) => (
-              <div key={i} className="p-8 rounded-3xl border border-border/50 bg-card hover:border-primary/50 transition-colors group">
+              <div
+                key={i}
+                className="p-8 rounded-3xl border border-emerald-100 bg-white/70 backdrop-blur-sm hover:border-primary/50 transition-colors group shadow-sm"
+              >
                 <div className="w-12 h-12 bg-secondary rounded-2xl flex items-center justify-center mb-6 group-hover:bg-primary/10 transition-colors">
                   <feature.icon className="w-6 h-6 text-foreground group-hover:text-primary transition-colors" />
                 </div>
                 <h3 className="text-xl font-bold mb-3">{feature.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{feature.desc}</p>
+                <p className="text-muted-foreground leading-relaxed">
+                  {feature.desc}
+                </p>
               </div>
             ))}
           </motion.div>
